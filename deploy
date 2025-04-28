@@ -1,0 +1,17 @@
+#!/bin/bash
+
+
+# shellcheck disable=SC1091
+. common_vars.sh
+
+if ! openstack server show "$PROJECT_NAME" &>/dev/null; then
+    echo "Creating server $PROJECT_NAME..."
+    volume_uuid=$(openstack volume show "$PROJECT_NAME" -f value -c id)
+    port_uuid=$(openstack port show "$PROJECT_NAME" -f value -c id)
+    openstack server create --flavor "$SNO_FLAVOR" \
+        --port "$port_uuid" \
+        --volume "$volume_uuid" \
+        --wait "$PROJECT_NAME"
+else
+    echo "Server $PROJECT_NAME already exists, skipping creation."
+fi

@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# shellcheck disable=SC1091
+. common_vars.sh
+
+dnsmasq_conf_name="/etc/NetworkManager/dnsmasq.d/99-$PROJECT_NAME.conf"
+
+FIP=$(openstack floating ip list --long -f value -c Description -c "Floating IP Address" | sed -rn 's/([^\s]+)\s+'"$PROJECT_NAME"'.*/\1/p')
+
+if [ -z "$FIP" ]; then
+    echo "No floating IP found for project $PROJECT_NAME."
+    exit 1
+fi
+
+echo "Floating IP for project $PROJECT_NAME: $FIP"
+
+sudo tee "$dnsmasq_conf_name"<<-EOF
+local=/$PROJECT_CLUSTER.$PROJECT_DOMAIN/
+
+address=/*.apps.$PROJECT_CLUSTER.$PROJECT_DOMAIN/$FIP
+address=/api.$PROJECT_CLUSTER.$PROJECT_DOMAIN/$FIP
+EOF
+
+sudo systemctl restart NetworkManager
+
+echo "DNSMasq configuration updated and NetworkManager restarted."
+echo "Please check the DNS resolution with the following command:"
+echo "dig +short api.$PROJECT_CLUSTER.$PROJECT_DOMAIN"

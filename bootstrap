@@ -1,0 +1,87 @@
+#!/bin/bash
+
+# shellcheck disable=SC1091
+. common_vars.sh
+
+set -e
+
+instance_ip=$(sed -rn 's/^(.*)\.[0-9]+\/.*$/\1'."$SNO_IP_OFF"'/p' <<< "$PROJECT_CIDR")
+
+security_groups() {
+    local name=$1
+    local description=$2
+
+    if ! openstack security group show "$name" &>/dev/null; then
+        echo "Creating security group $name..."
+        openstack security group create --description "$description" "$name"
+        echo "Adding rules to security group $name..."
+        openstack security group rule create --remote-ip 0.0.0.0/0 --protocol icmp "$name"
+        openstack security group rule create --remote-ip 0.0.0.0/0 --protocol tcp --dst-port 22 "$name"
+        openstack security group rule create --remote-ip 0.0.0.0/0 --protocol tcp --dst-port 80 "$name"
+        openstack security group rule create --remote-ip 0.0.0.0/0 --protocol tcp --dst-port 443 "$name"
+        openstack security group rule create --remote-ip 0.0.0.0/0 --protocol tcp --dst-port 6443 "$name"
+        openstack security group rule create --remote-ip 0.0.0.0/0 --protocol tcp --dst-port 22623 "$name"
+    else
+        echo "Security group $name already exists, skipping creation."
+    fi
+}
+
+create_networks() {
+    local name=$1
+    local external_net=$2
+
+    if ! openstack router show "$name" &>/dev/null; then
+        echo "Creating router $name..."
+        openstack router create "$name"
+        echo "Setting router $name to use external network $external_net..."
+        openstack router set --external-gateway "$external_net" "$name"
+    else
+        echo "Router $name already exists, skipping creation."
+    fi
+
+    if ! openstack network show "$name" &>/dev/null; then
+        echo "Creating network $name and attaching to router..."
+        openstack network create "$name"
+        echo "Creating subnet $name with CIDR $PROJECT_CIDR..."
+        openstack subnet create --network "$name" --subnet-range "$PROJECT_CIDR" "$name"
+        echo "Adding subnet $name to router $name..."
+        openstack router add subnet "$name" "$name"
+        echo "Creating port $name with fixed IP $instance_ip..."
+        openstack port create --network "$name" --fixed-ip "subnet=$name,ip-address=$instance_ip" "$name"
+        port_uuid=$(openstack port show "$PROJECT_NAME" -f value -c id)
+        echo "Creating floating IP for port $port_uuid..."
+        openstack float ip create --description "$PROJECT_NAME" --port "$port_uuid" "$PSI_NETWORK"
+    else
+        echo "Network $name already exists, skipping creation."
+    fi
+
+}
+
+create_networks "$PROJECT_NAME" "$PSI_NETWORK"
+
+if ! openstack image show "$SNO_ISO_IMAGE" &>/dev/null; then
+    echo "Image $SNO_ISO_IMAGE not found, creating from $SNO_ISO_IMAGE..."
+    openstack image create --container-format bare --disk-format iso --progress --file "$SNO_ISO_IMAGE" "$SNO_ISO_IMAGE"
+else
+    echo "Image $SNO_ISO_IMAGE already exists, skipping creation."
+fi
+
+if ! openstack volume show "$PROJECT_NAME" &>/dev/null; then
+    echo "Volume $PROJECT_NAME not found, creating..."
+    openstack volume create --size "$SNO_VOLUME_SIZE" --bootable "$PROJECT_NAME"
+else
+    echo "Volume $PROJECT_NAME already exists, skipping creation."
+fi
+
+
+if ! openstack server show "$PROJECT_NAME" &>/dev/null; then
+    echo "Creating server $PROJECT_NAME..."
+    volume_uuid=$(openstack volume show "$PROJECT_NAME" -f value -c id)
+    port_uuid=$(openstack port show "$PROJECT_NAME" -f value -c id)
+    openstack server create --flavor "$SNO_FLAVOR" \
+        --image "$SNO_ISO_IMAGE" --port "$port_uuid" \
+        --block-device uuid="$volume_uuid",source_type=volume,destination_type=volume \
+        --wait "$PROJECT_NAME"
+else
+    echo "Server $PROJECT_NAME already exists, skipping creation."
+fi
