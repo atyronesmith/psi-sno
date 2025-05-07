@@ -1,0 +1,41 @@
+---
+- name: Setup CoreDNS on Fedora
+  hosts: all
+  become: true
+  remote_user: fedora
+
+  tasks:
+    - name: Read cluster configuration
+      ansible.builtin.include_vars:
+        file: clusters.yml
+
+    - name: Iterate over clusters variable and build dictionary of items
+      ansible.builtin.set_fact:
+        cluster_dict: >-
+          {{
+            cluster_dict | default({}) |
+            combine(
+              {item.value.domain: [ item ]},
+              recursive=true,
+              list_merge='append_rp'
+            )
+          }}
+      loop: "{{ clusters | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Print cluster_dict
+      ansible.builtin.debug:
+        var: item
+      loop: "{{ cluster_dict | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Iterate over domains variable include tasks from add_cluster_tasks.yml
+      ansible.builtin.include_tasks: add_cluster_tasks.yml
+      vars:
+        cluster_domain: "{{ item.key }}"
+        cluster_list: "{{ item.value }}"
+      loop: "{{ cluster_dict | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"

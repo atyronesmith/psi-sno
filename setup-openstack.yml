@@ -1,0 +1,90 @@
+---
+- name: Configure OpenStack Router and Network for nfv-sno
+  hosts: localhost          # Runs on the machine where Ansible is executed
+  gather_facts: false     # No need to gather facts for these tasks
+  connection: local       # Modules will connect to OpenStack API locally
+
+  vars:
+    router_name: "nfv-sno-openstack"
+    internal_network_name: "nfv-sno-openstack"
+    internal_subnet_name: "nfv-sno-openstack-subnet"
+    external_gateway_network_name: "provider_net_shared_3"
+    internal_subnet_cidr: "192.168.200.0/24" # Example CIDR, please adjust if needed
+#    internal_subnet_dns: ["8.8.8.8", "8.8.4.4"] # Example DNS, adjust as needed
+
+  tasks:
+    - name: "Ensure router exists and external gateway is set"
+      openstack.cloud.router:
+        state: present
+        name: "{{ router_name }}"
+        external_gateway_info:
+          network: "{{ external_gateway_network_name }}"
+          # enable_snat: true # Default is true, explicitly set if needed
+      register: router_info
+
+    - name: "Display router creation/update information"
+      ansible.builtin.debug:
+        var: router_info
+      when: router_info is changed or ansible_verbosity > 0
+
+    - name: "Ensure internal network exists"
+      openstack.cloud.network:
+        state: present
+        name: "{{ internal_network_name }}"
+      register: network_info
+
+    - name: "Display network creation/update information"
+      ansible.builtin.debug:
+        var: network_info
+      when: network_info is changed or ansible_verbosity > 0
+
+    - name: "Ensure subnet exists on network"
+      openstack.cloud.subnet:
+        state: present
+        name: "{{ internal_subnet_name }}"
+        network_name: "{{ internal_network_name }}"
+        cidr: "{{ internal_subnet_cidr }}"
+        # dns_nameservers: "{{ internal_subnet_dns }}"
+        # gateway_ip: "192.168.200.1" # Optional: specify gateway for this subnet, often the .1 address
+        # enable_dhcp: true # Default is true
+      register: subnet_info
+
+    - name: "Display subnet creation/update information"
+      ansible.builtin.debug:
+        var: subnet_info
+      when: subnet_info is changed or ansible_verbosity > 0
+
+    - name: "Ensure router is attached to subnet"
+      openstack.cloud.router:
+        state: present
+        name: "{{ router_name }}"
+        interfaces:
+          - net: "{{ internal_network_name }}"
+            subnet: "{{ internal_subnet_name }}"
+      register: router_interface_info
+
+    - name: "Display router interface attachment information"
+      ansible.builtin.debug:
+        var: router_interface_info
+      when: router_interface_info is changed or ansible_verbosity > 0
+
+    - name: "Final configuration summary"
+      ansible.builtin.debug:
+        msg:
+          - "Router '{{ router_name }}' configured."
+          - "External gateway set to '{{ external_gateway_network_name }}'."
+          - "Internal network '{{ internal_network_name }}' with subnet '{{ internal_subnet_name }}' ({{ internal_subnet_cidr }}) created."
+          - "Router '{{ router_name }}' has an interface on subnet '{{ internal_subnet_name }}'."
+
+    - name: "Create port on network with default security group"
+      openstack.cloud.port:
+        state: present
+        name: "{{ internal_network_name }}-port"
+        network: "{{ internal_network_name }}"
+        # By not specifying 'security_groups', OpenStack will use the
+        # default security group(s) for the project on this network.
+        # If you needed to specify a particular security group by name (e.g. if 'default'
+        # is not the one automatically applied or you want a specific one):
+        # security_groups:
+        #   - default # Assuming a security group named 'default' exists
+      register: port_info

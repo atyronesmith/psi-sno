@@ -43,11 +43,12 @@ create_networks() {
         echo "Creating network $name and attaching to router..."
         openstack network create "$name"
         echo "Creating subnet $name with CIDR $PROJECT_CIDR..."
-        openstack subnet create --network "$name" --subnet-range "$PROJECT_CIDR" "$name"
+        openstack subnet create --dns-nameserver 11.0.1.10 --network "$name" --subnet-range "$PROJECT_CIDR" "$name"
         echo "Adding subnet $name to router $name..."
         openstack router add subnet "$name" "$name"
         echo "Creating port $name with fixed IP $instance_ip..."
-        openstack port create --network "$name" --fixed-ip "subnet=$name,ip-address=$instance_ip" "$name"
+        openstack port create --network "$name" --fixed-ip "subnet=$name,ip-address=$instance_ip" \
+               "$name"
         port_uuid=$(openstack port show "$PROJECT_NAME" -f value -c id)
         echo "Creating floating IP for port $port_uuid..."
         openstack float ip create --description "$PROJECT_NAME" --port "$port_uuid" "$PSI_NETWORK"
@@ -58,13 +59,6 @@ create_networks() {
 }
 
 create_networks "$PROJECT_NAME" "$PSI_NETWORK"
-
-if ! openstack image show "$SNO_ISO_IMAGE" &>/dev/null; then
-    echo "Image $SNO_ISO_IMAGE not found, creating from $SNO_ISO_IMAGE..."
-    openstack image create --container-format bare --disk-format iso --progress --file "$SNO_ISO_IMAGE" "$SNO_ISO_IMAGE"
-else
-    echo "Image $SNO_ISO_IMAGE already exists, skipping creation."
-fi
 
 if ! openstack volume show "$PROJECT_NAME" &>/dev/null; then
     echo "Volume $PROJECT_NAME not found, creating..."

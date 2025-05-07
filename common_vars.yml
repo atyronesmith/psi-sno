@@ -1,0 +1,12 @@
+project_name: nfv-sno
+project_cidr: "11.0.0.0/16"
+project_domain: "nfv.com"
+project_cluster: "psi"
+
+psi_provider_network: "provider_net_shared_3"
+
+sno_iso_image: "rhcos-live.iso"
+sno_flavor: "g.memory.xxl"
+sno_volume_size: 10
+
+ocp_version: "4.18.10"

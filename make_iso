@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # shellcheck disable=SC1091
-. common_vars.sh
+. common_vars
 
 project_dir="proj-$PROJECT_NAME"
 
@@ -11,7 +11,7 @@ iso_dir=iso
 
 ocp_arch=x86_64
 
-iso_url=$(./openshift-install coreos print-stream-json | grep location | grep $ocp_arch | grep iso | cut -d\" -f4)
+iso_url=$(openshift-install coreos print-stream-json | grep location | grep $ocp_arch | grep iso | cut -d\" -f4)
 
 mkdir -p $iso_dir
 
@@ -33,7 +33,7 @@ mkdir -p "$project_dir"
 
 cp install-config.yaml "$project_dir"/install-config.yaml
 
-./openshift-install --dir="$project_dir" create single-node-ignition-config
+openshift-install --dir="$project_dir" create single-node-ignition-config
 
 coreos-installer() {
     podman run --privileged --pull always --rm \
@@ -42,3 +42,6 @@ coreos-installer() {
 }
 
 coreos-installer iso ignition embed -fi "$project_dir"/bootstrap-in-place-for-live-iso.ign "$SNO_ISO_IMAGE"
+
+openstack image delete "$SNO_ISO_IMAGE"
+openstack image create --container-format bare --disk-format iso --progress --file "$SNO_ISO_IMAGE" "$SNO_ISO_IMAGE"

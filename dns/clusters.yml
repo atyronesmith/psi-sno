@@ -1,0 +1,13 @@
+clusters:
+  psi:
+    domain: nfv.com
+    ip: 11.0.0.100/24
+    lb_ip: 10.0.111.61
+  psi2:
+    domain: abc.com
+    ip: 11.0.0.101/24
+    lb_ip: 10.0.111.62
+  foo:
+    domain: nfv.com
+    ip: 11.0.0.102/24
+    lb_ip: 10.0.111.63

@@ -1,3 +1,5 @@
 install-config.yaml
 *.iso
+*.qcow2
 proj-*
+.openshift_install.log

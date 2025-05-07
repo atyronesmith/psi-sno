@@ -1,0 +1,29 @@
+- name: Create cluster DNS config
+  ansible.builtin.template:
+    src: ./templates/cluster.j2
+    dest: /etc/coredns/clusters/{{ cluster_domain }}.cluster
+    mode: '0644'
+    owner: coredns
+    group: coredns
+
+- name: Create cluster DNS record
+  ansible.builtin.template:
+    src: ./templates/record.j2
+    dest: /etc/coredns/clusters/{{ cluster_domain }}.record
+    mode: '0644'
+    owner: coredns
+    group: coredns
+
+- name: Create cluster reverse DNS record
+  ansible.builtin.template:
+    src: ./templates/reverse.j2
+    dest: /etc/coredns/clusters/{{ cluster_domain }}-{{ reverse_ip_list | join('.') }}.reverse
+    mode: '0644'
+    owner: coredns
+    group: coredns
+  vars:
+    reverse_ip_list: "{{ cluster.value.ip | ansible.utils.ipaddr('address') | split('.') | reverse }}"
+  loop: "{{ cluster_list }}"
+  loop_control:
+    label: "{{ cluster_domain }}"
+    loop_var: cluster

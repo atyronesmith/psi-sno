@@ -1,0 +1,77 @@
+---
+- name: Create and Attach OpenStack Volume to Server
+  hosts: localhost          # Runs on the machine where Ansible is executed
+  gather_facts: false     # No need to gather facts for these OpenStack tasks
+  connection: local       # Modules will connect to OpenStack API locally
+
+  vars:
+    server_name: "nfv-sno" # Name of the server to which the volume will be attached
+    volume_name: "volume-for-{{ server_name }}-01" # Descriptive name for the new volume
+    volume_size_gb: 120
+    # volume_type: "" # Optional: Specify a volume type if needed, e.g., "ssd", "high-iops"
+    # availability_zone: "" # Optional: Specify an availability zone for the volume
+
+  tasks:
+    - name: "Check if server '{{ server_name }}' exists"  # noqa name[template]
+      openstack.cloud.server_info:
+        cloud: psi
+        name: "{{ server_name }}"
+      register: server_check
+      failed_when: server_check.servers | length == 0
+
+    - name: "Store server ID"
+      ansible.builtin.set_fact:
+        target_server_id: "{{ server_check.servers[0].id }}"
+      when: server_check.servers | length > 0 # Only if server was found
+
+    - name: "Ensure server '{{ server_name }}' was found" # noqa name[template]
+      ansible.builtin.fail:
+        msg: "Server '{{ server_name }}' not found. Cannot proceed."
+      when: target_server_id is not defined
+
+    - name: "Create a {{ volume_size_gb }}GB Cinder volume named '{{ volume_name }}'" # noqa name[template]
+      openstack.cloud.volume:
+        state: present
+        display_name: "{{ volume_name }}"
+        size: "{{ volume_size_gb }}"
+        # type: "{{ volume_type | default(omit) }}" # Uncomment and set if you have specific volume types
+        # availability_zone: "{{ availability_zone | default(omit) }}" # Uncomment if needed
+        # description: "Data volume for {{ server_name }}" # Optional description
+        wait: true # Wait for the volume to become 'available'
+        timeout: 600 # Timeout in seconds for volume creation
+      register: volume_info
+
+    - name: "Display volume creation information"
+      ansible.builtin.debug:
+        var: volume_info
+      when: volume_info is changed or ansible_verbosity > 0
+
+    - name: "Attach volume to server '{{ server_name }}' (ID: {{ target_server_id }})" # noqa name[template]
+      openstack.cloud.server_volume:
+        state: present
+        server: "{{ target_server_id }}" # Can also use server_name, but ID is more precise
+        volume: "{{ volume_info.volume.id }}" # Use the ID of the newly created volume
+        # device: "/dev/vdb" # Optional: suggest a device name, but hypervisor often decides.
+                            # Not specifying allows OpenStack to pick the next available.
+        wait: true # Wait for the attachment to complete
+        timeout: 300 # Timeout in seconds for attachment
+      register: attach_info
+      notify: "Final Summary"
+
+    - name: "Display volume attachment information"
+      ansible.builtin.debug:
+        msg:
+          - "Volume '{{ volume_name }}' (ID: {{ volume_info.volume.id }}) attached to server '{{ server_name }}'."
+          - "Device path on server: {{ attach_info.server_volume.device | default('N/A, check server OS') }}"
+          - "Attachment ID: {{ attach_info.server_volume.id | default('N/A') }}"
+      when: attach_info is changed or ansible_verbosity > 0
+
+  handlers:
+    - name: "Final Summary"
+      ansible.builtin.debug:
+        msg:
+          - "Volume attachment process completed successfully."
+          - "Server: {{ server_name }}"
+          - "Volume: {{ volume_name }}"
+          - "Volume ID: {{ volume_info.volume.id }}"
+          - "Attachment ID: {{ attach_info.server_volume.id | default('N/A') }}"

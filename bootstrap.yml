@@ -1,0 +1,56 @@
+---
+- name: Wait for OpenShift Bootstrap Completion
+  hosts: localhost          # This playbook runs tasks on the Ansible control node
+  gather_facts: false     # No need to gather facts from localhost for this task
+  connection: local       # Ensures modules run locally
+  vars_files:
+    - common_vars.yml        # Load variables from an external file (if needed)
+  vars:
+    wait_timeout_minutes: 10
+    # Define the directory where your OpenShift installation configuration files
+    # (e.g., install-config.yaml, auth/, etc.) are located.
+    # The 'openshift-install' command often needs to be run from this directory.
+    # Example: install_dir: "/home/user/ocp_install_files/mycluster"
+    # If 'openshift-install' is in your PATH and doesn't need a specific CWD,
+    # you can leave install_dir commented out or remove the 'chdir' argument.
+    install_dir: "{{ lookup('env', 'PWD') }}/proj-{{ project_name }}" # REQUIRED: Set this to your OpenShift installation directory
+
+  tasks:
+    - name: "Check status of '{{ install_dir }}'"
+      ansible.builtin.stat:
+        path: "{{ install_dir }}"
+      register: dir_status
+
+    - name: "Fail if installation directory does not exist '{{ install_dir }}'"
+      ansible.builtin.fail:
+        msg: "Required installation directory '{{ install_dir }}' does not exist or is not a directory."
+      when: not dir_status.stat.exists or not dir_status.stat.isdir
+
+    - name: "Wait for the OpenShift bootstrap to complete successfully"
+      ansible.builtin.command: "openshift-install wait-for bootstrap-complete --log-level=info"
+      args:
+        # The 'chdir' argument changes the current working directory before executing the command.
+        # This is crucial if 'openshift-install' needs to find configuration files relative to this path.
+        chdir: "{{ install_dir }}"
+      register: bootstrap_status
+      # The 'timeout' parameter specifies the maximum time in seconds Ansible will wait for the command to complete.
+      # If the command exceeds this time, the task will fail.
+      timeout: "{{ wait_timeout_minutes * 60 }}" # Converts minutes to seconds
+      # 'changed_when' determines if this task reports a "changed" state.
+      # We consider it "changed" if the bootstrap process reports completion in stdout,
+      # or more simply, if the command returns successfully (rc=0).
+      # The command itself indicates completion via its exit code.
+      changed_when: bootstrap_status.rc == 0 # True if command succeeded
+      # By default, if the command returns a non-zero exit code or if the 'timeout' is reached,
+      # this task will fail, and the playbook will stop. This is the desired behavior.
+
+    - name: "Bootstrap successfully completed"
+      ansible.builtin.debug:
+        msg: |
+          OpenShift bootstrap successfully completed within the {{ wait_timeout_minutes }} minute time limit.
+          Return Code: {{ bootstrap_status.rc }}
+          STDOUT:
+          {{ bootstrap_status.stdout | default('(No STDOUT)') }}
+          STDERR:
+          {{ bootstrap_status.stderr | default('(No STDERR)') }}
+      # This task will only execute if the previous 'command' task succeeded.

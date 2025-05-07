@@ -1,0 +1,20 @@
+---
+- name: Create cluster networks
+
+  gather_facts: false
+  vars:
+    cluster_name: "sno"
+    cluster_domain: "sno.psi"
+    cluster_ip: ""
+
+  tasks:
+    - name: Create SNO Router
+      openstack.cloud.router:
+        cloud: psi
+        name: "{{ cluster_name }}-router"
+        state: present
+        external_gateway: public
+        interfaces:
+          - subnet: nfv-sno
+          - subnet: nfv-sno-{{ cluster_name }}
+      register: router_info
