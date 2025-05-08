@@ -2,6 +2,9 @@ project_name: nfv-sno
 project_cidr: "11.0.0.0/16"
 project_domain: "nfv.com"
 project_cluster: "psi"
+project_cloud: "psi"
+
+project_openstack_cidr: "192.168.200.0/24"
 
 psi_provider_network: "provider_net_shared_3"
 

@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: net-debug-container
+  namespace: openstack # You can change this to your desired namespace
+  labels:
+    app: bash-shell # Optional: A label for easy selection
+  annotations:
+    # This annotation tells Multus to attach the 'foo' network.
+    # If the NetworkAttachmentDefinition 'foo' is in a different namespace
+    # than this Pod, you would specify it as: 'namespace-of-nad/foo'.
+    k8s.v1.cni.cncf.io/networks: "internalapi"
+spec:
+  containers:
+  - name: bash-container
+    # Using ubi8 (not ubi-minimal) as it reliably includes bash
+    image: registry.redhat.io/ubi9/ubi
+    # This command keeps the container running so you can exec into it.
+    # The primary purpose of this pod is to provide a shell via 'oc exec'.
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        echo "Bash shell pod running. Use 'oc exec -it bash-shell-pod -- /bin/bash' to connect."
+        sleep infinity
+    resources:
+      limits:
+        memory: "256Mi" # Slightly more memory in case you run tools in the shell
+        cpu: "200m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+    # You can add a securityContext here if needed, for example:
+    securityContext:
+      allowPrivilegeEscalation: true
+      runAsNonRoot: false
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+          - ALL
+  # terminationGracePeriodSeconds: 30 # Optional

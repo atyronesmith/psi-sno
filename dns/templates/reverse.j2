@@ -1,0 +1,11 @@
+$TTL    1800
+$ORIGIN {{ reverse_ip_list[1:] | join('.') }}.in-addr.arpa.
+@   IN  SOA  dns domains (
+    2017042745 ; serial
+    7200       ; refresh (2 hours)
+    3600       ; retry (1 hour)
+    1209600    ; expire (2 weeks)
+    3600       ; minimum (1 hour)
+    )
+
+{{ reverse_ip_list | join('.') }}.in-addr.arpa.       IN  PTR {{ cluster.key }}.{{ cluster_domain }}.

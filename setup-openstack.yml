@@ -3,22 +3,22 @@
   hosts: localhost          # Runs on the machine where Ansible is executed
   gather_facts: false     # No need to gather facts for these tasks
   connection: local       # Modules will connect to OpenStack API locally
+  vars_files:
+    - common_vars.yml        # Load variables from an external file (if needed)
 
   vars:
-    router_name: "nfv-sno-openstack"
-    internal_network_name: "nfv-sno-openstack"
-    internal_subnet_name: "nfv-sno-openstack-subnet"
-    external_gateway_network_name: "provider_net_shared_3"
-    internal_subnet_cidr: "192.168.200.0/24" # Example CIDR, please adjust if needed
-#    internal_subnet_dns: ["8.8.8.8", "8.8.4.4"] # Example DNS, adjust as needed
+    router_name: "{{ project_name }}-openstack"
+    internal_network_name: "{{ project_name }}-openstack"
+    internal_subnet_name: "{{ project_name }}-openstack-subnet"
 
   tasks:
     - name: "Ensure router exists and external gateway is set"
       openstack.cloud.router:
+        cloud: "{{ project_cloud }}"
         state: present
         name: "{{ router_name }}"
         external_gateway_info:
-          network: "{{ external_gateway_network_name }}"
+          network: "{{ psi_provider_network }}"
           # enable_snat: true # Default is true, explicitly set if needed
       register: router_info
 
@@ -29,6 +29,7 @@
 
     - name: "Ensure internal network exists"
       openstack.cloud.network:
+        cloud: "{{ project_cloud }}"
         state: present
         name: "{{ internal_network_name }}"
       register: network_info
@@ -40,10 +41,11 @@
 
     - name: "Ensure subnet exists on network"
       openstack.cloud.subnet:
+        cloud: "{{ project_cloud }}"
         state: present
         name: "{{ internal_subnet_name }}"
         network_name: "{{ internal_network_name }}"
-        cidr: "{{ internal_subnet_cidr }}"
+        cidr: "{{ project_openstack_cidr }}"
         # dns_nameservers: "{{ internal_subnet_dns }}"
         # gateway_ip: "192.168.200.1" # Optional: specify gateway for this subnet, often the .1 address
         # enable_dhcp: true # Default is true
@@ -56,6 +58,7 @@
 
     - name: "Ensure router is attached to subnet"
       openstack.cloud.router:
+        cloud: "{{ project_cloud }}"
         state: present
         name: "{{ router_name }}"
         interfaces:
@@ -72,19 +75,58 @@
       ansible.builtin.debug:
         msg:
           - "Router '{{ router_name }}' configured."
-          - "External gateway set to '{{ external_gateway_network_name }}'."
-          - "Internal network '{{ internal_network_name }}' with subnet '{{ internal_subnet_name }}' ({{ internal_subnet_cidr }}) created."
+          - "External gateway set to '{{ psi_provider_network }}'."
+          - "Internal network '{{ internal_network_name }}' with subnet '{{ internal_subnet_name }}' ({{ project_openstack_cidr }}) created."
           - "Router '{{ router_name }}' has an interface on subnet '{{ internal_subnet_name }}'."
+
+    - name: "Create security group for the port"
+      openstack.cloud.security_group:
+        cloud: "{{ project_cloud }}"
+        state: present
+        name: "vxlan"  # This is the default security group name in OpenStack
+        description: "VXLAN security group"
+        security_group_rules:
+          - protocol: tcp
+            port_range_min: 4789
+            port_range_max: 4789
+            remote_ip_prefix: "0.0.0.0/0"  # Allow from anywhere
+            direction: ingress
 
     - name: "Create port on network with default security group"
       openstack.cloud.port:
+        cloud: "{{ project_cloud }}"
         state: present
         name: "{{ internal_network_name }}-port"
         network: "{{ internal_network_name }}"
+
         # By not specifying 'security_groups', OpenStack will use the
         # default security group(s) for the project on this network.
         # If you needed to specify a particular security group by name (e.g. if 'default'
         # is not the one automatically applied or you want a specific one):
-        # security_groups:
-        #   - default # Assuming a security group named 'default' exists
+        security_groups:
+          - vxlan  # This is the security group created above
+          - default
       register: port_info
+
+    - name: Create/attach floating IP to the NFV DNS server
+      openstack.cloud.floating_ip:
+        cloud: "{{ project_cloud }}"
+        state: present
+        reuse: true
+        server: "{{ project_name }}"
+        network: "{{ psi_provider_network }}"
+        nat_destination: "{{ internal_network_name }}"
+        wait: true
+        timeout: 180
+
+    - name: Get the floating IP address of the sno openstack port
+      openstack.cloud.server_info:
+        cloud: "{{ project_cloud }}"
+        name: "{{ project_name }}"
+      register: server_info
+
+    - name: Print all of the floating ip addresses attached to the server
+      ansible.builtin.debug:
+        msg: "{{ item.floating_ip }}"
+      loop: "{{ server_info.servers[0].addresses[psi_provider_network] }}"
+      when: item.fixed_ip_address == port_info.port.fixed_ips[0].ip_address

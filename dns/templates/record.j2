@@ -9,9 +9,9 @@ $ORIGIN {{ cluster_domain }}.
     )
 @   3600 IN NS {{ cluster_domain }}.
 
-{% for cluster in item.value %}
-api.{{ cluster.key }}.{{ cluster_domain }}.            IN  A   {{ cluster.value.ip }}
-api-int.{{ cluster.key }}.{{ cluster_domain }}.        IN  A   {{ cluster.value.ip }}
-*.apps.{{ cluster.key }}.{{ cluster_domain }}.         IN  A   {{ cluster.value.ip }}
+{% for cluster in cluster_list %}
 
+api.{{ cluster.key }}.{{ cluster_domain }}.            IN  A   {{ cluster.value.lb_ip | ansible.utils.ipaddr('address') }}
+api-int.{{ cluster.key }}.{{ cluster_domain }}.        IN  A   {{ cluster.value.lb_ip | ansible.utils.ipaddr('address') }}
+*.apps.{{ cluster.key }}.{{ cluster_domain }}.         IN  A   {{ cluster.value.lb_ip | ansible.utils.ipaddr('address') }}
 {% endfor %}

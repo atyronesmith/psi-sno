@@ -1,0 +1,42 @@
+#This is not a script, but a collection of notes and commands for creating a server with OpenStack.
+
+m1.xlarge.disk
+
+BOOT_VOLUME="sno-disc-boot"
+FLAVOR="g.memory.xxl"
+IMAGE="sno_disc_full2.iso"
+NETWORK="NFV"
+SNO_VOLUME_NAME="sno"
+
+if ! openstack image show $IMAGE > /dev/null 2>&1; then
+    echo "Image $IMAGE not found, creating..."
+    openstack image create $IMAGE --file discovery_image_psi.iso --disk-format iso --container-format bare --progress
+else
+    echo "Image $IMAGE already exists."
+fi
+
+size=$(openstack image show $IMAGE -f value -c size)
+size_gb=$(( (size + 1024**3 - 1) / 1024**3 ))
+
+if ! openstack volume show $BOOT_VOLUME; then
+    echo "Volume $BOOT_VOLUME not found, creating..."
+    openstack volume create --image $IMAGE --bootable $BOOT_VOLUME --size $size_gb --description "SNO DISC"
+fi
+
+BOOT_VOLUME_UUID=$(openstack volume show $BOOT_VOLUME -f value -c id)
+VOLUME_UUID=$(openstack volume show $SNO_VOLUME_NAME -f value -c id)
+
+openstack server create \
+    --flavor $FLAVOR --image $IMAGE --network $NETWORK \
+    --block-device uuid=$VOLUME_UUID,source_type=volume,destination_type=volume,delete_on_termination=false \
+    --wait sno-disc
+
+;; openstack server create \
+;;     --flavor $FLAVOR --volume $BOOT_VOLUME_UUID --network $NETWORK \
+;;     --block-device uuid=$VOLUME_UUID,source_type=volume,destination_type=volume \
+;;     --wait sno-disc
+
+openstack server create \
+    --flavor $FLAVOR --network $NETWORK \
+    --volume $VOLUME_UUID\
+    --wait sno
