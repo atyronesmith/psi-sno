@@ -1,0 +1,91 @@
+---
+- name: Provision OpenStack SNO Resources
+  hosts: localhost # Run on the machine where Ansible and OpenStack CLI are configured
+  gather_facts: false
+  vars_files:
+    - common_vars.yml # Load variables from an external file (if needed)
+  vars:
+    sno_volume_size: 120 # Size of the boot volume in GB
+
+  tasks:
+    - name: Output calculated instance IP for verification
+      ansible.builtin.debug:
+        msg: "Calculated instance IP: {{ instance_ip }}"
+
+    # Corresponds to the security_groups() function logic
+    - name: Ensure security group exists {{ project_name }}
+      openstack.cloud.security_group:
+        state: present
+        name: "{{ project_name }}"
+        description: "Security group for {{ project_name }}"
+      register: sec_group_result
+
+    - name: Define security group rules for {{ project_name }}
+      vars:
+        # Rules from the bash script
+        rules_to_apply:
+          - { protocol: "icmp", remote_ip_prefix: "0.0.0.0/0", description: "Allow ICMP" }
+          - { protocol: "tcp", port_range_min: 22, port_range_max: 22, remote_ip_prefix: "0.0.0.0/0", description: "Allow SSH" }
+          - { protocol: "tcp", port_range_min: 80, port_range_max: 80, remote_ip_prefix: "0.0.0.0/0", description: "Allow HTTP" }
+          - { protocol: "tcp", port_range_min: 443, port_range_max: 443, remote_ip_prefix: "0.0.0.0/0", description: "Allow HTTPS" }
+          - { protocol: "tcp", port_range_min: 6443, port_range_max: 6443, remote_ip_prefix: "0.0.0.0/0", description: "Allow Kubernetes API" }
+          - { protocol: "tcp", port_range_min: 22623, port_range_max: 22623, remote_ip_prefix: "0.0.0.0/0", description: "Allow Machine Config Server" }
+      openstack.cloud.security_group_rule:
+        state: present
+        security_group: "{{ project_name }}" # Use the name of the security group
+        protocol: "{{ item.protocol }}"
+        port_range_min: "{{ item.port_range_min | default(omit) }}"
+        port_range_max: "{{ item.port_range_max | default(omit) }}"
+        remote_ip_prefix: "{{ item.remote_ip_prefix | default(omit) }}"
+        description: "{{ item.description | default(omit) }}"
+        ethertype: "IPv4"
+      loop: "{{ rules_to_apply }}"
+      # This task will run if the security group exists (either just created or already there).
+      # The module itself is idempotent and will only add rules if they don't exist.
+
+    # Corresponds to the create_networks() function logic
+    - name: Ensure router {{ project_name }} exists and is connected to external network {{ psi_provider_network }} # noqa name[template]
+      openstack.cloud.router:
+        state: present
+        name: "{{ project_name }}"
+        network: "{{ psi_provider_network }}" # Sets the external gateway
+        # Interfaces (subnets) are added in a separate task for clarity
+      register: router_result
+
+    - name: Ensure network {{ project_name }} exists # noqa name[template]
+      openstack.cloud.network:
+        state: present
+        name: "{{ project_name }}"
+      register: network_result
+
+    - name: Ensure subnet {{ project_name }} exists on network {{ project_name }} # noqa name[template]
+      openstack.cloud.subnet:
+        state: present
+        network_name: "{{ project_name }}"
+        name: "{{ project_name }}"
+        cidr: "{{ project_cidr }}"
+        dns_nameservers:
+          - "{{ project_dns_server }}"
+      register: subnet_result
+
+    - name: "Ensure router is attached to subnet"
+      openstack.cloud.router:
+        state: present
+        name: "{{ project_name }}"
+        interfaces:
+          - net: "{{ project_name }}"
+            subnet: "{{ project_name }}"
+      register: router_interface_info
+      when: subnet_result.subnet is defined and router_result.router is defined # Ensure parent resources exist
+
+    - name: Ensure port {{ project_name }} exists with fixed IP {{ instance_ip }} # noqa name[template]
+      openstack.cloud.port:
+        state: present
+        name: "{{ project_name }}"
+        network: "{{ project_name }}" # Name of the network
+        fixed_ips:
+          - subnet: "{{ project_name }}" # Name of the subnet
+            ip_address: "{{ instance_ip }}"
+        security_groups:
+          - "{{ project_name }}" # Attach the security group to the port
+      register: port_result

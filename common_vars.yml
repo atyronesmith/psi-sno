@@ -1,15 +1,30 @@
-project_name: nfv-sno
-project_cidr: "11.0.0.0/16"
+project_name: nfv-sno2
+project_cidr: "11.1.0.0/16"
 project_domain: "nfv.com"
 project_cluster: "psi"
 project_cloud: "psi"
+project_dns_server: "11.1.0.10"
 
 project_openstack_cidr: "192.168.200.0/24"
+project_openstack_port: "{{ project_name }}-os"
+router_name_os: "{{ project_name }}-os"
+internal_network_os: "{{ project_name }}-os"
+internal_subnet_os: "{{ project_name }}-os"
+
+project_instance_ip: "{{ project_cidr | ansible.utils.ipaddr('10') | ansible.utils.ipaddr('address') }}"
+project_instance_ip_os: "{{ (project_openstack_cidr | ansible.utils.ipaddr('10')) | ansible.utils.ipaddr('address') }}"
 
 psi_provider_network: "provider_net_shared_3"
 
 sno_iso_image: "rhcos-live.iso"
 sno_flavor: "g.memory.xxl"
-sno_volume_size: 10
+sno_volume_size: 120
 
 ocp_version: "4.18.10"
+
+# Directory containing your Butane Jinja2 template files (e.g., *.bu.j2)
+butane_templates_dir: "butane"
+# Directory where the final Ignition JSON configurations will be saved
+ignition_output_dir: "cr-gen"
+# Name or path of the butane executable
+butane_executable: "butane"

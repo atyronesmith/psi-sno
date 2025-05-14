@@ -10,16 +10,16 @@
   tasks:
     - name: Create key pair from local user
       openstack.cloud.keypair:
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         name: "{{ keyname }}"
         public_key_file: /home/nextgen/.ssh/id_rsa.pub
         state: present
 
     - name: Create NFV DNS server security group
       openstack.cloud.security_group:
-        name: nfv-sno-dns-sg
+        name: "{{ project_name }}-dns-sg"
         state: present
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         description: Security group for the NFV DNS server
         security_group_rules:
           - protocol: tcp
@@ -41,26 +41,26 @@
 
     - name: Get subnet ID for nfv-sno
       openstack.cloud.subnets_info:
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         name: nfv-sno
       register: nfv_sno_info
 
     - name: Create Port for the DNS server
       openstack.cloud.port:
-        name: nfv-dns-port
+        name: "{{ project_name }}-dns-port"
         state: present
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         network: nfv-sno
         security_groups:
-          - nfv-sno-dns-sg
+          - "{{ project_name }}-dns-sg"
           - default
         fixed_ips:
-          - ip_address: 11.0.0.10
+          - ip_address: "{{ project_dns_server }}"
             subnet_id: "{{ nfv_sno_info.subnets[0].id }}"
 
     - name: Check if the image already exists
       openstack.cloud.image_info:
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         name: "{{ image_name }}"
       register: image_info
 
@@ -76,7 +76,7 @@
 
         - name: Create the Fedora-Cloud-Base image
           openstack.cloud.image:
-            cloud: psi
+            cloud: "{{ project_cloud }}"
             name: "{{ image_name }}"
             state: present
             disk_format: qcow2
@@ -87,34 +87,34 @@
 
     - name: Create the NFV DNS server in the nfv PSI project
       openstack.cloud.server:
-        name: nfv-dns
+        name: "{{ project_name }}-dns"
         auto_ip: false
         state: present
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         image: "{{ image_name }}"
         flavor: PnTAE.CPU_2_Memory_4096_Disk_10
         boot_from_volume: true
         volume_size: 10
         key_name: "{{ keyname }}"
         nics:
-          - port-name: nfv-dns-port
+          - port-name: "{{ project_name }}-dns-port"
 
     - name: Create/attach floating IP to the NFV DNS server
       openstack.cloud.floating_ip:
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         state: present
         reuse: true
-        server: nfv-dns
-        network: provider_net_shared_3
-        nat_destination: nfv-sno
-        fixed_address: 11.0.0.10
+        server: "{{ project_name }}-dns"
+        network: "{{ psi_provider_network }}"
+        nat_destination: "{{ project_name }}"
+        fixed_address: "{{ project_dns_server }}"
         wait: true
         timeout: 180
 
     - name: Get the floating IP address of the NFV DNS server
       openstack.cloud.server_info:
-        cloud: psi
-        name: nfv-dns
+        cloud: "{{ project_cloud }}"
+        name: "{{ project_name }}-dns"
       register: nfv_dns_info
 
     - name: Print the floating IP address of the NFV DNS server

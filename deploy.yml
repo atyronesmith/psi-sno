@@ -1,0 +1,16 @@
+---
+- name: Deploy a SNO environment in PSI
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - common_vars.yml
+
+  tasks:
+    - name: "Create SNO network {{ project_cidr }}"
+      ansible.builtin.include_tasks: tasks/create_sno_net.yml
+
+    - name: "Create OS network {{ project_name }}-os" # noqa name[template]
+      ansible.builtin.include_tasks: tasks/create_os_net.yml
+
+    - name: "Create SNO server {{ project_name }}"
+      ansible.builtin.include_tasks: tasks/create_sno_server.yml

@@ -6,17 +6,11 @@
   vars_files:
     - common_vars.yml        # Load variables from an external file (if needed)
 
-  vars:
-    router_name: "{{ project_name }}-openstack"
-    internal_network_name: "{{ project_name }}-openstack"
-    internal_subnet_name: "{{ project_name }}-openstack-subnet"
-
   tasks:
-    - name: "Ensure router exists and external gateway is set"
+    - name: "Ensure external router exists and external gateway is set {{ project_name }}-os" # noqa name[template]
       openstack.cloud.router:
-        cloud: "{{ project_cloud }}"
         state: present
-        name: "{{ router_name }}"
+        name: "{{ project_name }}-os"
         external_gateway_info:
           network: "{{ psi_provider_network }}"
           # enable_snat: true # Default is true, explicitly set if needed
@@ -27,11 +21,10 @@
         var: router_info
       when: router_info is changed or ansible_verbosity > 0
 
-    - name: "Ensure internal network exists"
+    - name: "Ensure internal network exists {{ project_name }}-os" # noqa name[template]
       openstack.cloud.network:
-        cloud: "{{ project_cloud }}"
         state: present
-        name: "{{ internal_network_name }}"
+        name: "{{ project_name }}-os"
       register: network_info
 
     - name: "Display network creation/update information"
@@ -41,14 +34,11 @@
 
     - name: "Ensure subnet exists on network"
       openstack.cloud.subnet:
-        cloud: "{{ project_cloud }}"
         state: present
-        name: "{{ internal_subnet_name }}"
-        network_name: "{{ internal_network_name }}"
+        name: "{{ project_name }}-os"
+        network_name: "{{ project_name }}-os"
         cidr: "{{ project_openstack_cidr }}"
-        # dns_nameservers: "{{ internal_subnet_dns }}"
-        # gateway_ip: "192.168.200.1" # Optional: specify gateway for this subnet, often the .1 address
-        # enable_dhcp: true # Default is true
+        dns_nameservers: "{{ project_dns_server }}"
       register: subnet_info
 
     - name: "Display subnet creation/update information"
@@ -60,10 +50,10 @@
       openstack.cloud.router:
         cloud: "{{ project_cloud }}"
         state: present
-        name: "{{ router_name }}"
+        name: "{{ project_name }}-os"
         interfaces:
-          - net: "{{ internal_network_name }}"
-            subnet: "{{ internal_subnet_name }}"
+          - net: "{{ project_name }}-os"
+            subnet: "{{ project_name }}-os"
       register: router_interface_info
 
     - name: "Display router interface attachment information"
@@ -74,10 +64,10 @@
     - name: "Final configuration summary"
       ansible.builtin.debug:
         msg:
-          - "Router '{{ router_name }}' configured."
+          - "Router '{{ project_name }}-os' configured."
           - "External gateway set to '{{ psi_provider_network }}'."
-          - "Internal network '{{ internal_network_name }}' with subnet '{{ internal_subnet_name }}' ({{ project_openstack_cidr }}) created."
-          - "Router '{{ router_name }}' has an interface on subnet '{{ internal_subnet_name }}'."
+          - "Internal network '{{ project_name }}-os' with subnet '{{ project_name }}-os' ({{ project_openstack_cidr }}) created."
+          - "Router '{{ project_name }}-os' has an interface on subnet '{{ project_name }}-os'."
 
     - name: "Create security group for the port"
       openstack.cloud.security_group:
@@ -94,10 +84,9 @@
 
     - name: "Create port on network with default security group"
       openstack.cloud.port:
-        cloud: "{{ project_cloud }}"
         state: present
-        name: "{{ internal_network_name }}-port"
-        network: "{{ internal_network_name }}"
+        name: "{{ project_name }}-os"
+        network: "{{ project_name }}-os"
 
         # By not specifying 'security_groups', OpenStack will use the
         # default security group(s) for the project on this network.
@@ -107,26 +96,3 @@
           - vxlan  # This is the security group created above
           - default
       register: port_info
-
-    - name: Create/attach floating IP to the NFV DNS server
-      openstack.cloud.floating_ip:
-        cloud: "{{ project_cloud }}"
-        state: present
-        reuse: true
-        server: "{{ project_name }}"
-        network: "{{ psi_provider_network }}"
-        nat_destination: "{{ internal_network_name }}"
-        wait: true
-        timeout: 180
-
-    - name: Get the floating IP address of the sno openstack port
-      openstack.cloud.server_info:
-        cloud: "{{ project_cloud }}"
-        name: "{{ project_name }}"
-      register: server_info
-
-    - name: Print all of the floating ip addresses attached to the server
-      ansible.builtin.debug:
-        msg: "{{ item.floating_ip }}"
-      loop: "{{ server_info.servers[0].addresses[psi_provider_network] }}"
-      when: item.fixed_ip_address == port_info.port.fixed_ips[0].ip_address

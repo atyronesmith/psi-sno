@@ -1,0 +1,42 @@
+---
+- name: Create/attach floating IP to the openstack network server interface on {{ project_instance_ip_os }}
+  openstack.cloud.floating_ip:
+    state: present
+    reuse: true
+    server: "{{ project_name }}"
+    network: "{{ psi_provider_network }}"
+    nat_destination: "{{ project_name }}-os"
+    fixed_address: "{{ project_instance_ip_os }}"
+    wait: true
+    timeout: 180
+  register: floating_ip_result_os
+
+- name: Create/attach floating IP to the sno network server interface on {{ project_instance_ip }}  # noqa name[template]
+  openstack.cloud.floating_ip:
+    state: present
+    reuse: true
+    server: "{{ server_name }}" # Name of the server to associate FIP with
+    network: "{{ psi_provider_network }}" # External network to allocate FIP from
+    nat_destination: "{{ project_name }}" # NAT destination for the floating IP
+    fixed_address: "{{ project_instance_ip }}"
+    wait: true
+    timeout: 120
+  register: floating_ip_result
+
+- name: Display Floating IP
+  ansible.builtin.debug:
+    msg:
+      - "Allocated/Associated os net floating IP: {{ floating_ip_result_os.floating_ip.floating_ip_address }}"
+      - "Allocated/Associated sno net floating IP: {{ floating_ip_result.floating_ip.floating_ip_address }}"
+  when: floating_ip_result.floating_ip.floating_ip_address is defined
+
+- name: Get the floating IP address of the sno openstack port
+  openstack.cloud.server_info:
+    cloud: "{{ project_cloud }}"
+    name: "{{ project_name }}"
+  register: server_info
+
+- name: Print all of the floating ip addresses attached to the server
+  ansible.builtin.debug:
+    msg: "{{ item }}"
+  loop: "{{ server_info.servers[0].addresses }}"

@@ -1,0 +1,32 @@
+variant: openshift
+version: 4.18.0
+metadata:
+  name: 90-master-dns
+  labels:
+    machineconfiguration.openshift.io/role: master
+storage:
+  files:
+    - path: /etc/NetworkManager/conf.d/90-custom-dns.conf
+      mode: 0644 # Standard permissions for configuration files
+      overwrite: true # Ensures the file is created or replaced with this content
+      contents:
+        inline: |
+          # NetworkManager configuration file to set permanent DNS servers.
+          # This file is managed by Butane/Ignition.
+          #
+          # After the system boots with this configuration, NetworkManager
+          # should automatically use these settings.
+          #
+          # To verify on a running Fedora CoreOS system:
+          # - cat /etc/resolv.conf
+          # - resolvectl query google.com
+          #
+          # If changes are made to this file manually on a running system (not recommended,
+          # as Ignition applies it at boot), you would typically reload NetworkManager:
+          # sudo systemctl reload NetworkManager
+
+          [main]
+          # Comma-separated list of DNS servers.
+          # These servers will be used by default for all connections,
+          # unless a connection-specific DNS configuration overrides it.
+          dns={{ project_dns_server }}

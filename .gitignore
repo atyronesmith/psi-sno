@@ -3,3 +3,6 @@ install-config.yaml
 *.qcow2
 proj-*
 .openshift_install.log
+cr-gen
+secrets
+

@@ -14,7 +14,7 @@
   tasks:
     - name: "Check if server '{{ server_name }}' exists"  # noqa name[template]
       openstack.cloud.server_info:
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         name: "{{ server_name }}"
       register: server_check
       failed_when: server_check.servers | length == 0

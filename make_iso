@@ -36,9 +36,11 @@ cp install-config.yaml "$project_dir"/install-config.yaml
 openshift-install --dir="$project_dir" create single-node-ignition-config
 
 coreos-installer() {
+    set -o xtrace
     podman run --privileged --pull always --rm \
         -v /dev:/dev -v /run/udev:/run/udev -v "$PWD":/data \
         -w /data quay.io/coreos/coreos-installer:release "$@"
+    set +o xtrace
 }
 
 coreos-installer iso ignition embed -fi "$project_dir"/bootstrap-in-place-for-live-iso.ign "$SNO_ISO_IMAGE"

@@ -1,0 +1,139 @@
+---
+- name: Prepare RHCOS ISO with Ignition and Upload to OpenStack
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - common_vars.yml # Load variables from an external file (if needed)
+  vars:
+    iso_dir: "{{ playbook_dir }}/iso"
+    ocp_arch: "x86_64"
+    ocp_project_dir: "proj-{{ project_name }}"
+  tasks:
+    - name: Get RHCOS ISO URL
+      ansible.builtin.shell:
+        cmd: "set -o pipefail && openshift-install coreos print-stream-json | grep location | grep {{ ocp_arch }} | grep iso | cut -d\\\" -f4"
+      register: iso_url_result
+      changed_when: false
+      check_mode: false # This task needs to run to get the URL
+      delegate_to: localhost # Ensure this runs on the control node
+
+    - name: Set RHCOS ISO URL fact
+      ansible.builtin.set_fact:
+        iso_url: "{{ iso_url_result.stdout | trim }}"
+      when: iso_url_result.stdout is defined and iso_url_result.stdout | trim != ""
+      delegate_to: localhost # Ensure this runs on the control node
+
+    - name: Fail if ISO URL could not be determined
+      ansible.builtin.fail:
+        msg: "Could not determine RHCOS ISO URL. Command output: {{ iso_url_result.stderr if iso_url_result.stderr else iso_url_result.stdout }}"
+      when: iso_url is not defined or iso_url | length == 0
+
+    - name: Create ISO download directory
+      ansible.builtin.file:
+        path: "{{ iso_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Check if RHCOS ISO already exists in iso_dir
+      ansible.builtin.stat:
+        path: "{{ iso_dir }}/{{ sno_iso_image }}"
+      register: iso_file_stat
+
+    - name: Download RHCOS ISO
+      ansible.builtin.get_url:
+        url: "{{ iso_url }}"
+        dest: "{{ iso_dir }}/{{ sno_iso_image }}"
+        mode: '0644'
+      when: not iso_file_stat.stat.exists
+      register: download_result
+      # Retries and timeout can be added here if needed
+
+    - name: Remove existing project directory
+      ansible.builtin.file:
+        path: "{{ ocp_project_dir }}"
+        state: absent
+
+    - name: Create project directory
+      ansible.builtin.file:
+        path: "{{ ocp_project_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy install-config.yaml template to project directory
+      ansible.builtin.template:
+        src: ./templates/install-config.yaml.j2
+        dest: "{{ ocp_project_dir }}/install-config.yaml"
+        mode: '0644'
+
+    # - name: Copy install-config.yaml to project directory
+    #   ansible.builtin.copy:
+    #     src: "./install-config.yaml" # Assumes install-config.yaml is in the playbook's directory
+    #     dest: "{{ ocp_project_dir }}/install-config.yaml"
+    #     mode: '0644' # Explicitly set file permissions
+
+    - name: Create single-node ignition config
+      ansible.builtin.command:
+        cmd: "openshift-install --dir={{ ocp_project_dir }} create single-node-ignition-config"
+        creates: "{{ ocp_project_dir }}/bootstrap-in-place-for-live-iso.ign" # Makes task idempotent
+      # Ensure openshift-install is in PATH
+
+    - name: Copy ISO from iso_dir to project directory
+      ansible.builtin.copy:
+        src: "{{ iso_dir }}/{{ sno_iso_image }}"
+        dest: "{{ ocp_project_dir }}/{{ sno_iso_image }}" # Copies to the playbook's current working directory
+        force: true
+        mode: '0644' # Explicitly set file permissions
+
+    - name: Embed ignition config into ISO using coreos-installer (via Podman)
+      ansible.builtin.shell: # Using shell due to complex command structure and permissions
+        cmd: >
+          podman run --privileged --pull always --rm
+          -v /dev:/dev -v /run/udev:/run/udev -v "{{ playbook_dir }}":/data
+          -w /data quay.io/coreos/coreos-installer:release
+          iso ignition embed -fi "{{ ocp_project_dir }}/bootstrap-in-place-for-live-iso.ign" "{{ ocp_project_dir }}/{{ sno_iso_image }}"
+      register: embed_result
+      become: true # For --privileged podman
+      changed_when: embed_result.rc != 0
+      # This assumes podman is installed and user has rights, or become handles it.
+
+    # --- OpenStack Image Management ---
+    # Ensure your OpenStack environment variables (OS_*) are set,
+    # or you have a clouds.yaml configured for the openstack.cloud modules.
+
+    # - name: Delete existing OpenStack image (if any)
+    #   openstack.cloud.image:
+    #     name: "{{ sno_iso_image }}"
+    #     state: absent
+    #   # This module requires the openstack SDK: pip install openstacksdk
+    #   # Handle potential errors if image doesn't exist gracefully (module usually does)
+    #   failed_when: false # Ensures the task does not fail regardless of the outcome
+
+    - name: Output formatted OpenStack command to upload ISO
+      ansible.builtin.debug:
+        msg: "{{ image_command | split('\n') }}"
+      vars:
+        image_command: |
+          ----------------------------------------------------------------------
+          OpenStack ISO Upload Command
+          ----------------------------------------------------------------------
+          To upload the ISO image to OpenStack manually, you can use a command similar to this:
+
+          openstack image create --disk-format iso --container-format bare --file {{ sno_iso_image }} {{ ocp_project_dir }}/{{ sno_iso_image }}
+
+          Notes:
+          - Ensure you are logged into your OpenStack environment (source your RC file).
+          - The '--file' path should be accessible from where you run the command.
+          ----------------------------------------------------------------------
+    # - name: Create OpenStack image from modified ISO
+    #   openstack.cloud.image:
+    #     name: "{{ sno_iso_image }}"
+    #     container_format: bare
+    #     disk_format: iso
+    #     filename: "{{ ocp_project_dir }}/{{ sno_iso_image }}" # Path to the ISO in the current directory
+    #     state: present
+    #     sdk_log_level: DEBUG # Optional: Set to debug for detailed logs
+    #     sdk_log_path: openstack_sdk.log # Optional: Path to save the SDK logs
+    #     # properties: # Add any specific OpenStack image properties if needed
+    #     #   hw_disk_bus: 'scsi'
+    #     #   hw_scsi_model: 'virtio-scsi'
+    #   # This task will show progress if the SDK/CLI supports it.

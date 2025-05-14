@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-secondary-net
+  namespace: openstack # Or your target namespace
+  annotations:
+    # This annotation tells Multus to attach the 'internalapi' network.
+    # If the NetworkAttachmentDefinition 'internalapi' is in a different namespace
+    # than this Pod, you would specify it as: 'namespace-of-nad/internalapi'.
+    # For example: 'k8s.v1.cni.cncf.io/networks: networking-infra/internalapi'
+    #
+    # You can also specify an interface name and IP address if the NAD supports it:
+    # 'k8s.v1.cni.cncf.io/networks: '[
+    #   {
+    #     "name": "internalapi",
+    #     "interface": "net1",
+    #     "ips": ["10.10.10.10/24"],
+    #     "gateway": "10.10.10.1"
+    #   }
+    # ]'
+    # For this example, we'll use the simple form, assuming DHCP or IPAM from the NAD.
+    # k8s.v1.cni.cncf.io/networks: internalapi
+spec:
+  securityContext:
+    allowPrivilegeEscalation: false
+  containers:
+  - name: test-container
+    # Using ubi-minimal as a lightweight image suitable for testing
+    image: registry.redhat.io/ubi8/ubi-minimal
+    # Keep the container running indefinitely for testing purposes
+    command: ["/bin/sh", "-c", "sleep infinity"]
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+  # terminationGracePeriodSeconds: 30 # Optional: how long to wait before killing the pod

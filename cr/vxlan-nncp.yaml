@@ -1,0 +1,59 @@
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  labels:
+    osp/nncm-config-type: standard
+  name: vxlan-nncp
+  namespace: openstack
+spec:
+  desiredState:
+    dns-resolver:
+      config:
+        search: []
+        server:
+        - 10.11.5.160
+        - 10.2.70.212
+    interfaces:
+    - name: internalapi
+      type: vxlan
+      state: absent
+      description: internalapi vlan interface
+      vxlan:
+        base-iface: enp4s0
+        id: "20"
+        remote: 10.37.146.188
+        destination-port: 4789
+    - type: ethernet
+      name: enp4s0
+      state: absent
+      mtu: 1500
+      description: ctlplane interface
+      ipv4:
+        enabled: true
+        dhcp: true
+      ipv6:
+        enabled: false
+    - bridge:
+        options:
+          stp:
+            enabled: false
+      description: linux-bridge over ctlplane interface
+      ipv4:
+        address:
+        - ip: 192.168.122.10
+          prefix-length: "24"
+        dhcp: false
+        enabled: true
+      ipv6:
+        enabled: false
+      mtu: 1500
+      name: ospbr
+      state: absent
+      type: linux-bridge
+    route-rules:
+      config: []
+    routes:
+      config: []
+  nodeSelector:
+    kubernetes.io/hostname: psi.nfv.com
+    node-role.kubernetes.io/control-plane: ""

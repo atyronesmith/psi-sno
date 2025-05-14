@@ -12,7 +12,7 @@
   tasks:
     - name: Create SNO Openstack image
       openstack.cloud.image:
-        cloud: psi
+        cloud: "{{ project_cloud }}"
         name: "{{ cluster_name }}"
         state: present
         disk_format: iso
