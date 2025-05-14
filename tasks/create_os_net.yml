@@ -1,0 +1,95 @@
+- name: Output calculated instance IP for verification
+  ansible.builtin.debug:
+    msg: "Calculated instance IP: {{ project_instance_ip_os }}"
+
+- name: "Ensure external router exists and external gateway is set {{ project_name }}-os" # noqa name[template]
+  openstack.cloud.router:
+    state: present
+    name: "{{ project_name }}-os"
+    external_gateway_info:
+      network: "{{ psi_provider_network }}"
+      # enable_snat: true # Default is true, explicitly set if needed
+  register: router_info
+
+- name: "Display router creation/update information"
+  ansible.builtin.debug:
+    var: router_info
+  when: router_info is changed or ansible_verbosity > 0
+
+- name: "Ensure internal network exists {{ project_name }}-os" # noqa name[template]
+  openstack.cloud.network:
+    state: present
+    name: "{{ project_name }}-os"
+  register: network_info
+
+- name: "Display network creation/update information"
+  ansible.builtin.debug:
+    var: network_info
+  when: network_info is changed or ansible_verbosity > 0
+
+- name: "Ensure subnet exists on network"
+  openstack.cloud.subnet:
+    state: present
+    name: "{{ project_name }}-os"
+    network_name: "{{ project_name }}-os"
+    cidr: "{{ project_openstack_cidr }}"
+    dns_nameservers: "{{ project_dns_server }}"
+  register: subnet_info
+
+- name: "Display subnet creation/update information"
+  ansible.builtin.debug:
+    var: subnet_info
+  when: subnet_info is changed or ansible_verbosity > 0
+
+- name: "Ensure router is attached to subnet"
+  openstack.cloud.router:
+    cloud: "{{ project_cloud }}"
+    state: present
+    name: "{{ project_name }}-os"
+    interfaces:
+      - net: "{{ project_name }}-os"
+        subnet: "{{ project_name }}-os"
+  register: router_interface_info
+
+- name: "Display router interface attachment information"
+  ansible.builtin.debug:
+    var: router_interface_info
+  when: router_interface_info is changed or ansible_verbosity > 0
+- name: "Final configuration summary"
+  ansible.builtin.debug:
+    msg:
+      - "Router '{{ project_name }}-os' configured."
+      - "External gateway set to '{{ psi_provider_network }}'."
+      - "Internal network '{{ project_name }}-os' with subnet '{{ project_name }}-os' ({{ project_openstack_cidr }}) created."
+      - "Router '{{ project_name }}-os' has an interface on subnet '{{ project_name }}-os'."
+
+- name: "Create security group for the port"
+  openstack.cloud.security_group:
+    cloud: "{{ project_cloud }}"
+    state: present
+    name: "vxlan"  # This is the default security group name in OpenStack
+    description: "VXLAN security group"
+    security_group_rules:
+      - protocol: tcp
+        port_range_min: 4789
+        port_range_max: 4789
+        remote_ip_prefix: "0.0.0.0/0"  # Allow from anywhere
+        direction: ingress
+
+- name: "Create port on network with default security group"
+  openstack.cloud.port:
+    state: present
+    name: "{{ project_name }}-os"
+    network: "{{ project_name }}-os"
+    fixed_ips:
+      - subnet: "{{ project_name }}-os" # Name of the subnet
+        ip_address: "{{ project_instance_ip_os }}"
+    security_groups:
+      - vxlan  # This is the security group created above
+      - default
+  register: port_info
+
+- name: "Display port creation/update information"
+  ansible.builtin.debug:
+    var: port_info
+  when: port_info is changed or ansible_verbosity > 0
