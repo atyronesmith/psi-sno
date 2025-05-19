@@ -2,19 +2,16 @@ project_name: nfv-sno2
 project_cidr: "11.1.0.0/16"
 project_domain: "nfv.com"
 project_cluster: "psi"
-project_cloud: "psi"
-project_dns_server: "11.1.0.10"
-
+project_provider_network: "provider_net_shared_3"
 project_openstack_cidr: "192.168.200.0/24"
+
 project_openstack_port: "{{ project_name }}-os"
 router_name_os: "{{ project_name }}-os"
 internal_network_os: "{{ project_name }}-os"
 internal_subnet_os: "{{ project_name }}-os"
 
-project_instance_ip: "{{ project_cidr | ansible.utils.ipaddr('10') | ansible.utils.ipaddr('address') }}"
-project_instance_ip_os: "{{ (project_openstack_cidr | ansible.utils.ipaddr('10')) | ansible.utils.ipaddr('address') }}"
-
-psi_provider_network: "provider_net_shared_3"
+project_instance_ip: "{{ project_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
+project_instance_ip_os: "{{ (project_openstack_cidr | ansible.utils.ipaddr('100')) | ansible.utils.ipaddr('address') }}"
 
 sno_iso_image: "rhcos-live.iso"
 sno_flavor: "g.memory.xxl"
@@ -28,3 +25,9 @@ butane_templates_dir: "butane"
 ignition_output_dir: "cr-gen"
 # Name or path of the butane executable
 butane_executable: "butane"
+
+# DNS server configuration
+dns_name: "nfv-dns"
+dns_cidr: "192.168.100.0/24"
+dns_instance_ip: "{{ dns_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
+dns_fip: "10.0.108.151"

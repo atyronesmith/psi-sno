@@ -1,0 +1,9 @@
+- name: Delete server {{ project_name }}  # noqa name[template]
+  openstack.cloud.server:
+    name: "{{ project_name }}"
+    state: absent
+
+- name: Delete bootable volume {{ project_name }} # noqa name[template]
+  openstack.cloud.volume:
+    state: absent
+    name: "{{ project_name }}"

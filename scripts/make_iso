@@ -1,7 +1,9 @@
 #!/bin/bash
 
+set -eo pipefail
+
 # shellcheck disable=SC1091
-. common_vars
+. scripts/common_vars
 
 project_dir="proj-$PROJECT_NAME"
 
@@ -13,10 +15,12 @@ ocp_arch=x86_64
 
 iso_url=$(openshift-install coreos print-stream-json | grep location | grep $ocp_arch | grep iso | cut -d\" -f4)
 
+printf "ISO URL: %s\n" "$iso_url"
+
 mkdir -p $iso_dir
 
 if [ ! -f $iso_dir/"$SNO_ISO_IMAGE" ]; then
-    echo "Downloading RHCOS ISO..."
+    echo "Downloading RHCOS ISO... to $iso_dir/$SNO_ISO_IMAGE"
     curl -L "$iso_url" -o $iso_dir/"$SNO_ISO_IMAGE"
 else
     echo "RHCOS ISO already exists, skipping download."

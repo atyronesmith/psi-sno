@@ -6,6 +6,10 @@
     - common_vars.yml
 
   tasks:
+    - name: Delete server
+      ansible.builtin.include_tasks:
+        file: tasks/delete_sno_server.yml
+
     - name: Run tasks from tasks/delete_sno_net.yml
       ansible.builtin.include_tasks: tasks/delete_sno_net.yml
 

@@ -1,8 +1,8 @@
 clusters:
   psi:
     domain: nfv.com
-    ip: 11.0.0.100/24
-    lb_ip: 10.0.111.61
+    ip: 11.1.0.100/24
+    lb_ip: 10.0.108.218
   psi2:
     domain: abc.com
     ip: 11.0.0.101/24

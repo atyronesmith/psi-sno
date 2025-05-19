@@ -82,7 +82,7 @@
     - name: Create dnsmasq config files on localhost for each cluster domain # noqa run-once[task]
       ansible.builtin.copy:
         dest: "/etc/NetworkManager/dnsmasq.d/99-{{ item.key }}.conf"
-        content: "server=/{{ item.key }}/{{ project_dns_server }}" # As per user request for content
+        content: "server=/{{ item.key }}/{{ dns_fip }}" # As per user request for content
         owner: root
         group: root
         mode: '0644'
@@ -91,3 +91,13 @@
         label: "Creating localhost DNS for domain: {{ item.key }}"
       delegate_to: localhost # Perform this task on the Ansible control node
       run_once: true # Crucial: ensures this whole loop task runs once using cluster_dict from the first host.
+
+    - name: Restart coredns to apply dnsmasq changes # noqa run-once[task]
+      ansible.builtin.systemd:
+        name: coredns
+        state: restarted
+
+    - name: Restart NetworkManager to apply dnsmasq changes # noqa run-once[task]
+      ansible.builtin.systemd:
+        name: NetworkManager
+        state: restarted

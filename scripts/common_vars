@@ -1,11 +1,11 @@
 #!/bin/bash
 
-PROJECT_NAME="${PROJECT_NAME:-"nfv-sno"}"
-PROJECT_CIDR=${PROJECT_CIDR:-"11.0.0.0/16"}
+PROJECT_NAME="${PROJECT_NAME:-"nfv-sno2"}"
+PROJECT_CIDR="${PROJECT_CIDR:-"11.1.0.0/16"}"
 PROJECT_DOMAIN="${PROJECT_DOMAIN:-nfv.com}"
 PROJECT_CLUSTER="${PROJECT_CLUSTER:-psi}"
 
-PSI_NETWORK=${PSI_NETWORK,-provider_net_shared_3}
+PSI_NETWORK="${PSI_NETWORK,-provider_net_shared_3}"
 
 SNO_ISO_IMAGE=${SNO_ISO_IMAGE:-rhcos-live.iso}
 SNO_FLAVOR=${SNO_FLAVOR:-g.memory.xxl}

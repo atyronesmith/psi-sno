@@ -24,6 +24,7 @@
     wait: true
     timeout: 300
   register: volume_result
+
 # Corresponds to the server creation part
 - name: Ensure server {{ project_name }} exists # noqa name[template]
   openstack.cloud.server:
@@ -33,13 +34,13 @@
     image: "{{ sno_iso_image }}" # The image to install/boot on the volume
     flavor: "{{ sno_flavor }}"
     volumes:
-      - name: "{{ project_name }}" # Name of the volume to attach
+      - "{{ project_name }}" # Name of the volume to attach
     nics:
       - port-id: "{{ sno_port_result.ports[0].id }}" # Attach the pre-created port
       - port-id: "{{ os_port_result.ports[0].id }}" # Attach the pre-created OS port
-    security_groups: # Explicitly associate security group with server
-      - "{{ project_name }}"
-      - "{{ project_name }}-os"
+    # security_groups: # Explicitly associate security group with server
+    #   - "{{ project_name }}"
+    #   - "{{ project_name }}-os"
     # key_name: "your-ssh-key-name" # Optional: if you want to inject an SSH key
     # user_data: "{{ lookup('file', 'cloud-init-config.yaml') }}" # Optional: for cloud-init
     wait: true # Wait for the server to become active
@@ -53,5 +54,5 @@
       Server {{ server_result.server.name | default('N/A') }} is active.
       Instance ID: {{ server_result.server.id | default('N/A') }}.
       Floating IP (if associated): {{ floating_ip_result.floating_ip.floating_ip_address | default('Not associated or FIP task skipped') }}.
-      Fixed IP: {{ instance_ip }}.
+      Fixed IP: {{ project_instance_ip }}.
   when: server_result.server is defined

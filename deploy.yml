@@ -14,3 +14,6 @@
 
     - name: "Create SNO server {{ project_name }}"
       ansible.builtin.include_tasks: tasks/create_sno_server.yml
+
+    - name: "Attach floating IP to the SNO server {{ project_name }}"
+      ansible.builtin.include_tasks: tasks/attach_fip.yml
