@@ -1,19 +1,13 @@
-project_name: nfv-sno2
-project_cidr: "11.1.0.0/16"
-project_domain: "nfv.com"
-project_cluster: "psi"
 project_provider_network: "provider_net_shared_3"
+
 project_openstack_cidr: "192.168.200.0/24"
 
-project_openstack_port: "{{ project_name }}-os"
-router_name_os: "{{ project_name }}-os"
-internal_network_os: "{{ project_name }}-os"
-internal_subnet_os: "{{ project_name }}-os"
-
-project_instance_ip: "{{ project_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
 project_instance_ip_os: "{{ (project_openstack_cidr | ansible.utils.ipaddr('100')) | ansible.utils.ipaddr('address') }}"
 
-sno_iso_image: "rhcos-live.iso"
+iso_dir: "{{ playbook_dir }}/iso"
+sno_iso_image_name: "rhcos-live.iso"
+sno_iso_base: "rhcos-live"
+
 sno_flavor: "g.memory.xxl"
 sno_volume_size: 120
 

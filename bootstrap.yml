@@ -9,8 +9,10 @@
     wait_timeout_minutes: 10
     # Define the directory where your OpenShift installation configuration files
     # (e.g., install-config.yaml, auth/, etc.) are located.
-    ocp_project_dir: "proj-{{ project_name }}" # REQUIRED: Set this to your OpenShift installation directory
 
   tasks:
+    - name: Read project metadata
+      ansible.builtin.include_tasks: tasks/read_metadata.yml
+
     - name: "Include tasks/check_bootstrap.yml tasks"
       ansible.builtin.include_tasks: tasks/check_bootstrap.yml

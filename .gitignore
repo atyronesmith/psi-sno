@@ -5,4 +5,5 @@ proj-*
 .openshift_install.log
 cr-gen
 secrets
+projects
 

@@ -7,6 +7,9 @@
     - common_vars.yml
 
   tasks:
+    - name: Read project metadata
+      ansible.builtin.include_tasks: tasks/read_metadata.yml
+
     - name: "Get sno port information"
       openstack.cloud.port_info:
         name: "{{ project_name }}"

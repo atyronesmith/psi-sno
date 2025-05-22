@@ -6,6 +6,9 @@
     - common_vars.yml
 
   tasks:
+    - name: Read project metadata
+      ansible.builtin.include_tasks: tasks/read_metadata.yml
+
     - name: "Create SNO network {{ project_cidr }}"
       ansible.builtin.include_tasks: tasks/create_sno_net.yml
 

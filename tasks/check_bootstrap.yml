@@ -2,24 +2,24 @@
 # tasks/check_bootstrap.yml
 # Tasks to check for the existence of the installation directory
 # and wait for OpenShift bootstrap completion.
-# These tasks expect 'ocp_project_dir' and 'wait_timeout_minutes' variables
+# These tasks expect 'project_dir' and 'wait_timeout_minutes' variables
 # to be defined in the calling playbook.
-- name: "Check status of '{{ ocp_project_dir }}'"
+- name: "Check status of '{{ project_dir }}'"
   ansible.builtin.stat:
-    path: "{{ ocp_project_dir }}"
+    path: "{{ project_dir }}"
   register: dir_status
 
-- name: "Fail if installation directory does not exist '{{ ocp_project_dir }}'"
+- name: "Fail if installation directory does not exist '{{ project_dir }}'"
   ansible.builtin.fail:
-    msg: "Required installation directory '{{ ocp_project_dir }}' does not exist or is not a directory."
+    msg: "Required installation directory '{{ project_dir }}' does not exist or is not a directory."
   when: not dir_status.stat.exists or not dir_status.stat.isdir
 
-- name: "Wait for the OpenShift bootstrap to complete successfully {{ ocp_project_dir }}"
+- name: "Wait for the OpenShift bootstrap to complete successfully {{ project_dir }}"
   ansible.builtin.command: "openshift-install wait-for bootstrap-complete --log-level=debug"
   args:
     # The 'chdir' argument changes the current working directory before executing the command.
     # This is crucial if 'openshift-install' needs to find configuration files relative to this path.
-    chdir: "{{ ocp_project_dir }}"
+    chdir: "{{ project_dir }}"
   register: bootstrap_status
   # The 'timeout' parameter specifies the maximum time in seconds Ansible will wait for the command to complete.
   # If the command exceeds this time, the task will fail.
