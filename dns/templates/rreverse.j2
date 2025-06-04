@@ -1,0 +1,7 @@
+{% set rev_dns = reverse_ip_list | join('.') %}
+{{ rev_dns }}.in-addr.arpa:53 {
+    bind    enp3s0
+    root    "{{ dns_root }}"
+    file    ./{{ project_domain }}-{{ rev_dns }}.reverse
+    log
+}

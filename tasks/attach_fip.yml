@@ -3,7 +3,6 @@
   openstack.cloud.floating_ip:
     state: present
     reuse: true
-    floating_ip_address: 10.0.108.218
     server: "{{ project_name }}" # Name of the server to associate FIP with
     network: "{{ project_provider_network }}" # External network to allocate FIP from
     nat_destination: "{{ project_name }}" # NAT destination for the floating IP

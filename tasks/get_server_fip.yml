@@ -1,0 +1,38 @@
+- name: Get server information {{ project_name }}
+  openstack.cloud.server_info:
+    server: "{{ project_name }}"
+  register: server_info_result
+  failed_when: not server_info_result.servers # Fails if the list is empty
+  delegate_to: localhost
+
+- name: Set server ID fact
+  ansible.builtin.set_fact:
+    found_server_id: "{{ server_info_result.servers[0].id }}"
+    found_project_name: "{{ server_info_result.servers[0].name }}"
+  when: server_info_result.servers # True if list is not empty
+
+- name: Display found server details
+  ansible.builtin.debug:
+    msg: "Found server '{{ found_project_name }}' with ID '{{ found_server_id }}'."
+  when: found_server_id is defined
+
+- name: Set found_port to server_info_result.servers[0].addresses[project_name] if defined
+  ansible.builtin.set_fact:
+    found_port_list: "{{ server_info_result.servers[0].addresses[project_name] }}"
+  when: server_info_result.servers[0].addresses[project_name] is defined
+
+- name: Loop through found_port and find an object with the field OS-EXT-IPS:type == 'floating'
+  ansible.builtin.set_fact:
+    floating_ip: "{{ item }}"
+  loop: "{{ found_port_list }}"
+  when: item['OS-EXT-IPS:type'] == 'floating'
+  register: floating_ip_result
+
+- name: Display floating IP information
+  ansible.builtin.debug:
+    msg: "Floating IP: {{ floating_ip }}"
+  when: floating_ip_result.results | length > 0
+
+- name: Set variables from install-config.yaml
+  ansible.builtin.set_fact:
+    project_fip: "{{ floating_ip.addr }}"

@@ -1,14 +1,7 @@
-{{ cluster_domain }}:53 {
+{{ project_domain }}:53 {
     bind    {{ ansible_default_ipv4.interface }}
-    file    /etc/coredns/clusters/{{ cluster_domain }}.record
+    file    "{{ dns_root }}/{{ project_domain }}.record"
     log
 }
 
-{% for cluster in cluster_list %}
-{% set rev_dns = cluster.value.ip | ansible.utils.ipaddr('address') | split('.') | reverse | join('.') %}
-{{ rev_dns }}.in-addr.arpa:53 {
-    bind    enp3s0
-    file    /etc/coredns/clusters/{{ cluster_domain }}-{{ rev_dns }}.reverse
-    log
-}
-{% endfor %}
+import ./{{ project_domain }}-{{ reverse_ip_list | join('.') }}.rreverse

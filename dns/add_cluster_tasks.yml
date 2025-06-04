@@ -1,29 +1,53 @@
+- name: Set fact for reverse_ip_list
+  ansible.builtin.set_fact:
+    reverse_ip_list: "{{ project_instance_ip | ansible.utils.ipaddr('address') | split('.') | reverse }}"
+
 - name: Create cluster DNS config
   ansible.builtin.template:
     src: ./templates/cluster.j2
-    dest: /etc/coredns/clusters/{{ cluster_domain }}.cluster
+    dest: "{{ dns_root }}/{{ project_domain }}.cluster"
     mode: '0644'
     owner: coredns
     group: coredns
+  become: true
 
 - name: Create cluster DNS record
   ansible.builtin.template:
     src: ./templates/record.j2
-    dest: /etc/coredns/clusters/{{ cluster_domain }}.record
+    dest: "{{ dns_root }}/{{ project_domain }}.record"
     mode: '0644'
     owner: coredns
     group: coredns
+  become: true
+
+- name: Ensure A records are correctly set
+  become: true
+  ansible.builtin.lineinfile:
+    path: "{{ dns_root }}/{{ project_domain }}.record"  # IMPORTANT: Change this to the actual path of your zone file
+    regexp: '^{{ item | regex_escape }}\.{{ project_cluster }}\.{{ project_domain }}\.\s+IN\s+A\s+.*'
+    line: '{{ item }}.{{ project_cluster }}.{{ project_domain }}.       IN  A   {{ project_fip }}'
+    state: present
+    backup: false
+    create: false  # Set to 'yes' if you want to create the file if it doesn't exist (not typical for zone files)
+  loop:
+    - "api"
+    - "api-int"
+    - "*.apps"
+
+- name: Create cluster reverse DNS file
+  ansible.builtin.template:
+    src: ./templates/rreverse.j2
+    dest: "{{ dns_root }}/{{ project_domain }}-{{ reverse_ip_list | join('.') }}.rreverse"
+    mode: '0644'
+    owner: coredns
+    group: coredns
+  become: true
 
 - name: Create cluster reverse DNS record
   ansible.builtin.template:
     src: ./templates/reverse.j2
-    dest: /etc/coredns/clusters/{{ cluster_domain }}-{{ reverse_ip_list | join('.') }}.reverse
+    dest: "{{ dns_root }}/{{ project_domain }}-{{ reverse_ip_list | join('.') }}.reverse"
     mode: '0644'
     owner: coredns
     group: coredns
-  vars:
-    reverse_ip_list: "{{ cluster.value.ip | ansible.utils.ipaddr('address') | split('.') | reverse }}"
-  loop: "{{ cluster_list }}"
-  loop_control:
-    label: "{{ cluster_domain }}"
-    loop_var: cluster
+  become: true

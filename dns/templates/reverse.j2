@@ -8,4 +8,4 @@ $ORIGIN {{ reverse_ip_list[1:] | join('.') }}.in-addr.arpa.
     3600       ; minimum (1 hour)
     )
 
-{{ reverse_ip_list | join('.') }}.in-addr.arpa.       IN  PTR {{ cluster.key }}.{{ cluster_domain }}.
+{{ reverse_ip_list | join('.') }}.in-addr.arpa.       IN  PTR {{ project_cluster }}.{{ project_domain }}.

@@ -1,5 +1,5 @@
 $TTL    1800
-$ORIGIN {{ cluster_domain }}.
+$ORIGIN {{ project_domain }}.
 @   IN  SOA  dns domains (
     2017042745 ; serial
     7200       ; refresh (2 hours)
@@ -7,11 +7,4 @@ $ORIGIN {{ cluster_domain }}.
     1209600    ; expire (2 weeks)
     3600       ; minimum (1 hour)
     )
-@   3600 IN NS {{ cluster_domain }}.
-
-{% for cluster in cluster_list %}
-
-api.{{ cluster.key }}.{{ cluster_domain }}.            IN  A   {{ cluster.value.lb_ip | ansible.utils.ipaddr('address') }}
-api-int.{{ cluster.key }}.{{ cluster_domain }}.        IN  A   {{ cluster.value.lb_ip | ansible.utils.ipaddr('address') }}
-*.apps.{{ cluster.key }}.{{ cluster_domain }}.         IN  A   {{ cluster.value.lb_ip | ansible.utils.ipaddr('address') }}
-{% endfor %}
+@   3600 IN NS {{ project_domain }}.
