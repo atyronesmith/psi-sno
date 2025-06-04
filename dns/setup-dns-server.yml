@@ -92,9 +92,9 @@
         group: coredns
         mode: '0644'
 
-    - name: Ensure /etc/coredns/clusters directory exists
+    - name: Ensure directory exists {{ dns_root }}
       ansible.builtin.file:
-        path: /etc/coredns/clusters
+        path: "{{ dns_root }}"
         state: directory
         owner: coredns
         group: coredns

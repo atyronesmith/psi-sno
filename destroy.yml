@@ -6,6 +6,9 @@
     - common_vars.yml
 
   tasks:
+    - name: Read project metadata
+      ansible.builtin.include_tasks: tasks/read_metadata.yml
+
     - name: Delete server
       ansible.builtin.include_tasks:
         file: tasks/delete_sno_server.yml

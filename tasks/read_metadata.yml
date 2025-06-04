@@ -166,8 +166,10 @@
     project_cidr: "{{ install_config_vars.networking.machineNetwork[0].cidr }}"
     project_domain: "{{ install_config_vars.baseDomain }}"
     project_cluster: "{{ install_config_vars.metadata.name }}"
-    project_instance_ip: "{{ project_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
 
+- name: Set variables from install-config.yaml
+  ansible.builtin.set_fact:
+    project_instance_ip: "{{ project_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
 
 - name: Display Server Information
   ansible.builtin.debug:

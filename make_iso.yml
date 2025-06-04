@@ -5,122 +5,113 @@
   vars_files:
     - common_vars.yml # Load variables from an external file (if needed)
   vars:
-    iso_dir: "{{ playbook_dir }}/iso"
     ocp_arch: "x86_64"
-    ocp_project_dir: "proj-{{ project_name }}"
+    # project_name will be initially from common_vars.yml or extra-vars,
+    # then updated from metadata.json's infraID.
+    # install_config_name: This variable holds the path to a potential vars file or the primary install-config.
+    install_config_name: "{{ install_config | default('./install-config.yaml') }}"
+
   tasks:
-    - name: Check if RHCOS ISO already exists in iso_dir
+    - name: Ensure sno_iso_base is defined
+      ansible.builtin.fail:
+        msg: "The 'sno_iso_base' variable is not defined. Please define it in 'common_vars.yml'."
+      when: sno_iso_base is not defined or sno_iso_base == ""
+
+    - name: Display the effective install_config_name path (source install config)
+      ansible.builtin.debug:
+        msg: "The path for install_config_name (source install config) is: {{ install_config_name }}"
+
+    - name: "Check if the source install config file exists {{ install_config_name }}"
       ansible.builtin.stat:
-        path: "{{ iso_dir }}/{{ sno_iso_image }}"
-      register: iso_file_stat
+        path: "{{ install_config_name }}"
+      register: install_config_vars_file_stat
+      delegate_to: localhost
 
-    - name: Execute block if RHCOS ISO does not exist
-      when: not iso_file_stat.stat.exists
-      block:
-        - name: Get RHCOS ISO URL
-          ansible.builtin.shell:
-            cmd: "set -o pipefail && openshift-install coreos print-stream-json | grep location | grep {{ ocp_arch }} | grep iso | cut -d\\\" -f4"
-          register: iso_url_result
-          changed_when: false
-          check_mode: false # This task needs to run to get the URL
-          delegate_to: localhost # Ensure this runs on the control node
+    - name: Load variables from the source install config file if it exists
+      ansible.builtin.include_vars:
+        file: "{{ install_config_name }}"
+        name: "install_config_content" # Variables will be under install_config_content.X
+      when: install_config_vars_file_stat.stat.exists
+      delegate_to: localhost
 
-        - name: Set RHCOS ISO URL fact
-          ansible.builtin.set_fact:
-            iso_url: "{{ iso_url_result.stdout | trim }}"
-          when: iso_url_result.stdout is defined and iso_url_result.stdout | trim != ""
-          delegate_to: localhost # Ensure this runs on the control node
 
-        - name: Print RHCOS ISO URL
-          ansible.builtin.debug:
-            msg: "RHCOS ISO URL: {{ iso_url }}"
-          when: iso_url is defined and iso_url | length > 0
-
-        - name: Fail if ISO URL could not be determined
-          ansible.builtin.fail:
-            msg: "Could not determine RHCOS ISO URL. Command output: {{ iso_url_result.stderr if iso_url_result.stderr else iso_url_result.stdout }}"
-          when: iso_url is not defined or iso_url | length == 0
-
-        - name: Create ISO download directory
-          ansible.builtin.file:
-            path: "{{ iso_dir }}"
-            state: directory
-            mode: '0755'
-
-        - name: Download RHCOS ISO
-          ansible.builtin.get_url:
-            url: "{{ iso_url }}"
-            dest: "{{ iso_dir }}/{{ sno_iso_image }}"
-            mode: '0644'
-          when: not iso_file_stat.stat.exists
-          register: download_result
-        # Retries and timeout can be added here if needed
-
-    - name: Remove existing project directory
-      ansible.builtin.file:
-        path: "{{ ocp_project_dir }}"
-        state: absent
-
-    - name: Create project directory
-      ansible.builtin.file:
-        path: "{{ ocp_project_dir }}"
+    - name: Create a temporary directory for OpenShift installation assets
+      ansible.builtin.tempfile:
         state: directory
-        mode: '0755'
+        prefix: "ocp_install_assets_"
+      register: temp_install_config_dir_info # This var holds path to the temp directory
+      delegate_to: localhost
 
-    - name: Copy install-config.yaml template to project directory
-      ansible.builtin.template:
-        src: ./templates/install-config.yaml.j2
-        dest: "{{ ocp_project_dir }}/install-config.yaml"
-        mode: '0644'
-
-    - name: Create 'install-configs' directory
-      ansible.builtin.file:
-        path: install-configs     # The directory to create
-        state: directory          # Ensures it's a directory
-        mode: '0755'              # Sets permissions (optional)
-
-    - name: Copy rendered install-config.yaml to project directory
+    - name: Copy source install config ({{ install_config_name }}) to temporary directory as 'install-config.yaml' # noqa name[template]
       ansible.builtin.copy:
-        src: "{{ ocp_project_dir }}/install-config.yaml"
-        dest: install-configs/{{ project_name }}-install-config.yaml
+        src: "{{ install_config_name }}" # Source is the user-specified or default install_config_name
+        dest: "{{ temp_install_config_dir_info.path }}/install-config.yaml" # Must be 'install-config.yaml' for openshift-install
         mode: '0644'
+        remote_src: true # Assuming install_config_name is on the controller
+      when: temp_install_config_dir_info.path is defined and install_config_vars_file_stat.stat.exists
+      delegate_to: localhost
 
     - name: Create single-node ignition config
       ansible.builtin.command:
-        cmd: "openshift-install --dir={{ ocp_project_dir }} create single-node-ignition-config"
-        creates: "{{ ocp_project_dir }}/bootstrap-in-place-for-live-iso.ign" # Makes task idempotent
-      # Ensure openshift-install is in PATH
+        # openshift-install uses the --dir argument for all its operations
+        cmd: "openshift-install --dir={{ temp_install_config_dir_info.path }} create single-node-ignition-config"
+        # creates condition points to the ignition file within the temp directory
+        creates: "{{ temp_install_config_dir_info.path }}/bootstrap-in-place-for-live-iso.ign"
+      delegate_to: localhost
+      when: temp_install_config_dir_info.path is defined
+
+    - name: Read the metaday.json file that defines project variables
+      ansible.builtin.include_tasks: tasks/read_metadata.yml
+      vars:
+        metadata_location: "{{ temp_install_config_dir_info.path }}"
+      when: temp_install_config_dir_info.path is defined
+
+    - name: Copy temporary folder to a local project directory
+      ansible.builtin.copy:
+        src: "{{ temp_install_config_dir_info.path }}/"
+        dest: "{{ playbook_dir }}/projects/{{ project_name }}"
+        remote_src: true
+        mode: '0755'
+      when: temp_install_config_dir_info.path is defined
+      delegate_to: localhost
 
     - name: Copy ISO from iso_dir to project directory
       ansible.builtin.copy:
-        src: "{{ iso_dir }}/{{ sno_iso_image }}"
-        dest: "{{ ocp_project_dir }}/{{ sno_iso_image }}" # Copies to the playbook's current working directory
+        src: "{{ iso_dir }}/{{ sno_iso_image_name }}"
+        dest: "{{ project_dir }}/{{ project_iso_image }}"
         force: true
         mode: '0644' # Explicitly set file permissions
+      when: temp_install_config_dir_info.path is defined
+      delegate_to: localhost
 
     - name: Embed ignition config into ISO using coreos-installer (via Podman)
-      ansible.builtin.shell: # Using shell due to complex command structure and permissions
+      ansible.builtin.shell:
         cmd: >
-          podman run --privileged --pull always --rm
+          podman run --privileged --pull newer --rm
           -v /dev:/dev -v /run/udev:/run/udev -v {{ playbook_dir }}:/data
           -w /data quay.io/coreos/coreos-installer:release
-          iso ignition embed -fi {{ ocp_project_dir }}/bootstrap-in-place-for-live-iso.ign {{ ocp_project_dir }}/{{ sno_iso_image }}
+          iso ignition embed -fi {{ project_dir }}/bootstrap-in-place-for-live-iso.ign {{ project_dir }}/{{ project_iso_image }}
       register: embed_result
-      become: true # For --privileged podman
+      become: true
       changed_when: embed_result.rc != 0
-      # This assumes podman is installed and user has rights, or become handles it.
+      delegate_to: localhost
+      when: temp_install_config_dir_info.path is defined # Only if temp dir exists
 
-    # --- OpenStack Image Management ---
-    # Ensure your OpenStack environment variables (OS_*) are set,
-    # or you have a clouds.yaml configured for the openstack.cloud modules.
+    - name: Copy install-config.yaml to project directory
+      ansible.builtin.copy:
+        src: "{{ install_config_name }}"
+        dest: "{{ project_dir }}/install-config.yaml"
+        mode: '0644'
+      delegate_to: localhost
 
-    - name: Delete existing OpenStack image (if any)
-      openstack.cloud.image:
-        name: "{{ sno_iso_image }}"
-        state: absent
-      # This module requires the openstack SDK: pip install openstacksdk
-      # Handle potential errors if image doesn't exist gracefully (module usually does)
-      failed_when: false # Ensures the task does not fail regardless of the outcome
+    - name: Display the results
+      ansible.builtin.debug:
+        msg:
+          - "Project name: {{ project_name }}"
+          - "Project directory: {{ project_dir }}"
+          - "{{ install_config_name }} file copied to project directory."
+      when: project_name is defined and metadata_json_content.content is defined and (metadata_json_content.content | b64decode | from_json).infraID is defined
+      delegate_to: localhost
 
     - name: Output formatted OpenStack command to upload ISO
       ansible.builtin.debug:
@@ -132,22 +123,9 @@
           ----------------------------------------------------------------------
           To upload the ISO image to OpenStack manually, you can use a command similar to this:
 
-          openstack image create --progress --disk-format iso --container-format bare --file {{ ocp_project_dir }}/{{ sno_iso_image }} {{ sno_iso_image }}
+          openstack image create --progress --disk-format iso --container-format bare --file {{ project_dir }}/{{ project_iso_image }} {{ project_iso_image }}
 
           Notes:
           - Ensure you are logged into your OpenStack environment (source your RC file).
           - The '--file' path should be accessible from where you run the command.
           ----------------------------------------------------------------------
-    # - name: Create OpenStack image from modified ISO
-    #   openstack.cloud.image:
-    #     name: "{{ sno_iso_image }}"
-    #     container_format: bare
-    #     disk_format: iso
-    #     filename: "{{ ocp_project_dir }}/{{ sno_iso_image }}" # Path to the ISO in the current directory
-    #     state: present
-    #     sdk_log_level: DEBUG # Optional: Set to debug for detailed logs
-    #     sdk_log_path: openstack_sdk.log # Optional: Path to save the SDK logs
-    #     # properties: # Add any specific OpenStack image properties if needed
-    #     #   hw_disk_bus: 'scsi'
-    #     #   hw_scsi_model: 'virtio-scsi'
-    #   # This task will show progress if the SDK/CLI supports it.

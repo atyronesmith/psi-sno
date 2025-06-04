@@ -31,16 +31,17 @@
     name: "{{ project_name }}"
     auto_ip: false
     state: present
-    image: "{{ sno_iso_image }}" # The image to install/boot on the volume
+    image: "{{ project_iso_image }}" # The image to install/boot on the volume
     flavor: "{{ sno_flavor }}"
     volumes:
       - "{{ project_name }}" # Name of the volume to attach
     nics:
       - port-id: "{{ sno_port_result.ports[0].id }}" # Attach the pre-created port
       - port-id: "{{ os_port_result.ports[0].id }}" # Attach the pre-created OS port
-    # security_groups: # Explicitly associate security group with server
-    #   - "{{ project_name }}"
-    #   - "{{ project_name }}-os"
+    security_groups: # Explicitly associate security group with server
+      - "{{ psi_sno_sg_sno }}"
+      - "{{ psi_sno_sg_openstack }}"
+      - default
     # key_name: "your-ssh-key-name" # Optional: if you want to inject an SSH key
     # user_data: "{{ lookup('file', 'cloud-init-config.yaml') }}" # Optional: for cloud-init
     wait: true # Wait for the server to become active

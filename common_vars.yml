@@ -1,4 +1,11 @@
+# PSI provider network to be used for SNO deployments
 project_provider_network: "provider_net_shared_3"
+
+# Security group for the SNO network
+psi_sno_sg_sno: "sno-psi-sg-sno"
+psi_sno_sg_openstack: "sno-psi-sg-openstack"
+psi_sno_router_sno: "sno-psi-router"
+psi_sno_router_openstack: "sno-psi-router-openstack"
 
 project_openstack_cidr: "192.168.200.0/24"
 
@@ -25,3 +32,4 @@ dns_name: "nfv-dns"
 dns_cidr: "192.168.100.0/24"
 dns_instance_ip: "{{ dns_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
 dns_fip: "10.0.108.151"
+dns_root: "/etc/coredns/clusters"

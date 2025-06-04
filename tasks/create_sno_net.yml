@@ -4,48 +4,6 @@
     msg: "Calculated instance IP: {{ project_instance_ip }}"
 
 # Corresponds to the security_groups() function logic
-- name: Ensure security group exists {{ project_name }}
-  openstack.cloud.security_group:
-    state: present
-    name: "{{ project_name }}"
-    description: "Security group for {{ project_name }}"
-    security_group_rules:
-      - protocol: icmp
-        remote_ip_prefix: "0.0.0.0/0"  # Allow from anywhere
-        description: "Allow ICMP"
-        direction: ingress
-      - protocol: tcp
-        port_range_min: 22
-        port_range_max: 22
-        remote_ip_prefix: "0.0.0.0/0"
-        description: "SSH access"
-        direction: ingress
-      - protocol: tcp
-        port_range_min: 80
-        port_range_max: 80
-        remote_ip_prefix: "0.0.0.0/0"
-        description: "HTTP access"
-        direction: ingress
-      - protocol: tcp
-        port_range_min: 443
-        port_range_max: 443
-        remote_ip_prefix: "0.0.0.0/0"
-        description: "HTTPS access"
-        direction: ingress
-      - protocol: tcp
-        port_range_min: 6443
-        port_range_max: 6443
-        remote_ip_prefix: "0.0.0.0/0"
-        description: "Kubernetes API access"
-        direction: ingress
-      - protocol: tcp
-        port_range_min: 22623
-        port_range_max: 22623
-        remote_ip_prefix: "0.0.0.0/0"
-        description: "Machine Config Server access"
-        direction: ingress
-  register: sec_group_result
-
 - name: Ensure network {{ project_name }} exists # noqa name[template]
   openstack.cloud.network:
     state: present
@@ -62,11 +20,11 @@
       - "{{ dns_fip }}"
   register: subnet_result
 
-- name: "Ensure router is attached to subnet"
+- name: "Add interface to the sno networks router"
   openstack.cloud.router:
     state: present
     name: "{{ project_name }}"
-    network: "{{ project_provider_network }}" # Sets the external gateway
+    network: "{{ project_provider_network }}"
     interfaces:
       - net: "{{ project_name }}"
         subnet: "{{ project_name }}"
@@ -79,7 +37,7 @@
     name: "{{ project_name }}"
     network: "{{ project_name }}" # Name of the network
     security_groups:
-      - "{{ project_name }}"
+      - "{{ psi_sno_sg_sno }}"
       - default
     fixed_ips:
       - subnet: "{{ project_name }}" # Name of the subnet

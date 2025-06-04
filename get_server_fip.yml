@@ -1,8 +1,6 @@
----
-- name: Start Playbook
-  hosts: all
+- name: Deploy a SNO environment in PSI
+  hosts: localhost
   gather_facts: false
-  remote_user: core
   vars_files:
     - common_vars.yml
 
@@ -10,5 +8,5 @@
     - name: Read project metadata
       ansible.builtin.include_tasks: tasks/read_metadata.yml
 
-    - name: Include tasks
-      ansible.builtin.include_tasks: tasks/start_cluster.yml
+    - name: Get server FIP for cluster
+      ansible.builtin.include_tasks: tasks/get_server_fip.yml

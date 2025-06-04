@@ -48,7 +48,7 @@
     name: "{{ project_name }}"
     auto_ip: false
     state: present
-    image: "{{ sno_iso_image }}" # The image to install/boot on the volume
+    image: "{{ project_iso_image }}" # The image to install/boot on the volume
     flavor: "{{ sno_flavor }}"
     volumes:
       - "{{ project_name }}" # Name of the volume to attach

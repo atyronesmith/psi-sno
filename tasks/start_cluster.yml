@@ -1,0 +1,75 @@
+- name: "Get sno port information"
+  openstack.cloud.port_info:
+    name: "{{ project_name }}"
+  delegate_to: localhost
+  register: sno_port_result
+
+- name: "Get OS port information"
+  openstack.cloud.port_info:
+    name: "{{ project_name }}-os"
+  delegate_to: localhost
+  register: os_port_result
+
+- name: Fail if either port is not defined
+  ansible.builtin.fail:
+    msg: "Either the SNO port or OS port is missing. Please check the configuration."
+  when: sno_port_result.ports is not defined or sno_port_result.ports | length != 1 or
+        os_port_result.ports is not defined or os_port_result.ports | length != 1
+
+- name: Ensure server {{ project_name }} exists # noqa name[template]
+  delegate_to: localhost
+  openstack.cloud.server:
+    name: "{{ project_name }}"
+    sdk_log_level: DEBUG
+    sdk_log_path: "/tmp/openstack_sdk.log"
+    auto_ip: false
+    state: present
+    security_groups:
+      - "{{ psi_sno_sg_sno }}"
+      - "{{ psi_sno_sg_openstack }}"
+      - default
+    flavor: "{{ sno_flavor }}"
+    boot_volume: "{{ project_name }}" # Name of the volume to attach
+    nics:
+      - port-id: "{{ sno_port_result.ports[0].id }}" # Attach the pre-created port
+      - port-id: "{{ os_port_result.ports[0].id }}" # Attach the pre-created OS port
+    # key_name: "your-ssh-key-name" # Optional: if you want to inject an SSH key
+    # user_data: "{{ lookup('file', 'cloud-init-config.yaml') }}" # Optional: for cloud-init
+    wait: true # Wait for the server to become active
+    timeout: 600 # Timeout for waiting (adjust as needed)
+  register: server_result
+  notify: "Delete inventory_hostname from known_hosts"
+
+- name: Delete inventory_hostname from known_hosts # noqa no-handler
+  ansible.builtin.command:
+    cmd: ssh-keygen -R "{{ project_instance_ip }}"
+    removes: "{{ lookup('env', 'HOME') + '/.ssh/known_hosts' }}"
+  delegate_to: localhost
+  when: server_result.changed
+
+- name: Wait for SSH to become available
+  ansible.builtin.wait_for:
+    port: 22
+    delay: 10
+    timeout: 300
+    state: started
+  register: wait_result
+
+- name: Ensure lines starting with 'pool' are changed to 'pool foo'
+  ansible.builtin.lineinfile:
+    path: /etc/chrony.conf # The configuration file to modify
+    regexp: '^pool .*'       # Regular expression to find lines starting with "pool " followed by any characters
+    line: 'pool clock.corp.redhat.com iburst'         # The line that should replace any matched lines
+    state: present           # Ensures the line is present (default behavior)
+    backrefs: false             # We are not using backreferences from the regexp in the 'line'
+                             # This means the entire matched line will be replaced by the content of 'line'.
+    backup: true              # Creates a backup of the original file before making changes.
+                             # The backup file will have a timestamp in its name.
+  register: chrony_config_change # Register the result of the task to check if changes were made
+
+- name: "Restart chronyd" # noqa no-handler
+  ansible.builtin.systemd_service:
+    name: chronyd # Or chrony, depending on your system (e.g., RHEL/CentOS vs Debian/Ubuntu)
+    state: restarted
+  become: true
+  when: chrony_config_change.changed # Only restart if the configuration was changed
