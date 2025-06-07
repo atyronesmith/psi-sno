@@ -1,0 +1,6 @@
+---
+# tasks file for psi-project
+- name: "Include and run tasks from make_iso.yml"
+  ansible.builtin.include_tasks: make_iso.yml
+  tags:
+    - make_iso

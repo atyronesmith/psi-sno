@@ -1,20 +1,10 @@
 ---
-- name: Remove the sno network
+- name: Remove the sno network and related resources
   hosts: localhost
   gather_facts: false
-  vars_files:
-    - common_vars.yml
 
   tasks:
-    - name: Read project metadata
-      ansible.builtin.include_tasks: tasks/read_metadata.yml
-
-    - name: Delete server
-      ansible.builtin.include_tasks:
-        file: tasks/delete_sno_server.yml
-
-    - name: Run tasks from tasks/delete_sno_net.yml
-      ansible.builtin.include_tasks: tasks/delete_sno_net.yml
-
-    - name: Run tasks from tasks/delete_os_net.yml
-      ansible.builtin.include_tasks: tasks/delete_os_net.yml
+    - name: Run destroy tasks from cluster role
+      ansible.builtin.include_role:
+        name: cluster
+        tasks_from: destroy

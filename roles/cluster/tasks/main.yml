@@ -1,0 +1,10 @@
+---
+- name: Print usage instructions for this role
+  ansible.builtin.debug:
+    msg: |
+      This role does not execute tasks directly from main.yml.
+      You must use 'tasks_from' and specify either 'deploy' or 'destroy' when including this role.
+      Example:
+        - include_role:
+            name: cluster
+            tasks_from: deploy

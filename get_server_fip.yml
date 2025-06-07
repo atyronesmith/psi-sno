@@ -1,12 +1,14 @@
-- name: Deploy a SNO environment in PSI
+- name: Get a deployed SNO server's floating IP
   hosts: localhost
   gather_facts: false
-  vars_files:
-    - common_vars.yml
 
   tasks:
-    - name: Read project metadata
-      ansible.builtin.include_tasks: tasks/read_metadata.yml
+    - name: Dynamically include the 'make_iso' tasks from the 'psi-project' role
+      ansible.builtin.include_role:
+        name: cluster
+        tasks_from: read_metadata
 
-    - name: Get server FIP for cluster
-      ansible.builtin.include_tasks: tasks/get_server_fip.yml
+    - name: Dynamically include the 'read_metadata' tasks from the 'psi-project' role
+      ansible.builtin.include_role:
+        name: cluster
+        tasks_from: get_server_fip.yml

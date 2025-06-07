@@ -1,0 +1,61 @@
+---
+- name: Find or Allocate Two Unused Floating IPs
+  hosts: localhost
+  gather_facts: false
+  vars:
+    desired_fip_count: 2
+    # IMPORTANT: You MUST set this variable to the name of your OpenStack external network
+    # from which floating IPs can be allocated.
+    fip_network_name: "provider_net_shared_3"
+
+    # Internal variables
+    _found_or_allocated_fips: [] # Initialize an empty list to store IP addresses
+
+  tasks:
+    - name: Check if openstack.cloud collection is available
+      ansible.builtin.assert:
+        that:
+          - lookup('community.general.collection_version', 'openstack.cloud') is defined
+        fail_msg: |
+          The 'openstack.cloud' collection is not found.
+          Please install it using: ansible-galaxy collection install openstack.cloud
+        quiet: true
+      ignore_errors: true # noqa: ignore-errors
+      # This is a pre-flight check. If the collection is missing,
+      # subsequent OpenStack module tasks will fail with clearer errors.
+
+    - name: Verify fip_network_name is set
+      ansible.builtin.assert:
+        that:
+          - fip_network_name != "your_external_network_name_here"
+          - fip_network_name | length > 0
+        fail_msg: "The variable 'fip_network_name' is not set. Please edit the playbook and specify your external network name."
+        quiet: true
+
+    - name: Get all existing floating IP information
+      openstack.cloud.floating_ip_info:
+      # cloud_name parameter removed, will use default OS_CLOUD
+      register: all_fips_info
+
+    - name: Identify and collect existing unused floating IPs
+      ansible.builtin.set_fact:
+        _found_or_allocated_fips: "{{ _found_or_allocated_fips + [item.floating_ip_address] }}"
+      loop: "{{ all_fips_info.floating_ips | default([]) }}"
+      when:
+        # An unassociated FIP typically has its port_id as null/None or an empty string.
+        - item.port_id is none or item.port_id == ''
+        # Ensure we only collect up to the desired count from existing ones
+        - _found_or_allocated_fips | length < desired_fip_count
+      loop_control:
+        label: "{{ item.floating_ip_address }}"
+
+    - name: Calculate how many new IPs are needed
+      ansible.builtin.set_fact:
+        _needed_fips_count: "{{ desired_fip_count - (_found_or_allocated_fips | length) }}"
+
+    - name: Display status before potential allocation
+      ansible.builtin.debug:
+        msg:
+          - "Desired FIPs: {{ desired_fip_count }}"
+          - "Found existing unused FIPs: {{ _found_or_allocated_fips }}"
+          - "Number of new FIPs to attempt to allocate: {{ _needed_fips_count }}"

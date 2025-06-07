@@ -1,0 +1,17 @@
+---
+- name: Create dnsmasq config files on localhost for each cluster domain # noqa run-once[task]
+  ansible.builtin.copy:
+    dest: "/etc/NetworkManager/dnsmasq.d/99-{{ project_domain }}.conf"
+    content: "server=/{{ project_domain }}/{{ dns_fip }}" # As per user request for content
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  delegate_to: localhost # Run this task on the control node, not the target hosts.
+
+- name: Restart NetworkManager to apply dnsmasq changes # noqa run-once[task]
+  ansible.builtin.systemd:
+    name: NetworkManager
+    state: restarted
+  become: true
+  delegate_to: localhost # Ensure this runs on the control node to apply changes globally.

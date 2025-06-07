@@ -1,0 +1,23 @@
+- name: Perform a action '{{ server_action }}' on server '{{ project_name }}' # noqa name[template]
+  openstack.cloud.server_action:
+    server: "{{ project_name }}" # Prefer using ID for actions
+    action: "{{ server_action }}"
+    wait: true # Wait for the action to be acknowledged or completed (depending on OpenStack version)
+    timeout: 180 # Timeout for the action
+  register: server_reset_result
+  when:
+    - project_name is defined
+    - server_action is defined
+    - server_action in ['hard-reboot', 'rebuild'] # Ensure the action is valid
+
+- name: Display hard reset action result
+  ansible.builtin.debug:
+    msg: "Hard reset action initiated for server '{{ project_name }}'."
+    # server_reset_result might not contain detailed success confirmation,
+    # as the action is often asynchronous. 'wait: true' helps.
+  when: server_reset_result is defined and not server_reset_result.failed
+
+- name: Handle failure in hard reset action
+  ansible.builtin.fail:
+    msg: "Failed to initiate hard reset for server '{{ project_name }}'. Result: {{ server_reset_result }}"
+  when: server_reset_result is defined and server_reset_result.failed

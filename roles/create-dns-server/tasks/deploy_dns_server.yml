@@ -1,0 +1,124 @@
+---
+- name: Create the DNS network
+  openstack.cloud.network:
+    name: "{{ dns_name }}"
+    state: present
+  register: dns_network
+
+- name: Create DNS subnet that is attached to the nfv-dns network
+  openstack.cloud.subnet:
+    name: "{{ dns_name }}"
+    network_name: "{{ dns_name }}"
+    cidr: "{{ dns_cidr }}"
+    state: present
+  register: dns_subnet
+
+- name: "Router {{ project_provider_network }}/{{ dns_network.network.id }}/{{ dns_subnet.subnet.id }}" # noqa name[template]
+  openstack.cloud.router:
+    state: present
+    name: "{{ dns_name }}"
+    external_gateway_info:
+      network: "{{ project_provider_network }}"
+    interfaces:
+      - net: "{{ dns_network.network.id }}"
+        subnet: "{{ dns_subnet.subnet.id }}"
+      # enable_snat: true # Default is true, explicitly set if needed
+  register: router_info
+
+- name: Create key pair from local user
+  openstack.cloud.keypair:
+    name: "{{ keyname }}"
+    public_key_file: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa.pub"
+    state: present
+
+- name: Create NFV DNS server security group
+  openstack.cloud.security_group:
+    name: "{{ dns_name }}-sg"
+    state: present
+    description: Security group for the NFV DNS server
+    security_group_rules:
+      - protocol: tcp
+        port_range_min: 53
+        port_range_max: 53
+        remote_ip_prefix: 0.0.0.0/0
+      - protocol: udp
+        port_range_min: 53
+        port_range_max: 53
+        remote_ip_prefix: 0.0.0.0/0
+      - protocol: tcp
+        port_range_min: 22
+        port_range_max: 22
+        remote_ip_prefix: 0.0.0.0/0
+      - protocol: icmp
+        port_range_min: -1
+        port_range_max: -1
+        remote_ip_prefix: 0.0.0.0/0
+  register: dns_sg
+
+- name: Create Port for the DNS server {{ dns_instance_ip }}
+  openstack.cloud.port:
+    name: "{{ dns_name }}"
+    state: present
+    network: "{{ dns_network.network.id }}"
+    fixed_ips:
+      - ip_address: "{{ dns_instance_ip }}"
+        subnet_id: "{{ dns_subnet.subnet.id }}"
+  register: dns_port
+
+- name: Check if the image already exists
+  openstack.cloud.image_info:
+    name: "{{ image_name }}"
+  register: image_info
+
+- name: Check/Install image
+  when: image_info.images | length == 0
+  block:
+    - name: Download the Fedora-Cloud-Base image
+      ansible.builtin.get_url:
+        url: "{{ image_url }}"
+        dest: /tmp
+        mode: "0644"
+        force: false
+
+    - name: Create the Fedora-Cloud-Base image
+      openstack.cloud.image:
+        name: "{{ image_name }}"
+        state: present
+        disk_format: qcow2
+        container_format: bare
+        filename: "/tmp/{{ image_name }}"
+        tags:
+          - nfv-sno
+
+- name: Create the NFV DNS server in the nfv PSI project
+  openstack.cloud.server:
+    name: "{{ dns_name }}"
+    auto_ip: false
+    state: present
+    image: "{{ image_name }}"
+    flavor: PnTAE.CPU_2_Memory_4096_Disk_10
+    boot_from_volume: true
+    volume_size: 10
+    key_name: "{{ keyname }}"
+    security_groups:
+      - "{{ dns_sg.security_group.id }}"
+      - default
+    nics:
+      - port-id: "{{ dns_port.port.id }}"
+
+- name: Create/attach floating IP to the NFV DNS server
+  openstack.cloud.floating_ip:
+    state: present
+    reuse: true
+    floating_ip_address: "{{ dns_fip }}"
+    server: "{{ dns_name }}"
+    network: "{{ project_provider_network }}"
+    nat_destination: "{{ dns_name }}"
+    fixed_address: "{{ dns_instance_ip }}"
+    wait: true
+    timeout: 180
+  register: floating_ip_result
+
+- name: Print the floating IP address of the NFV DNS server
+  ansible.builtin.debug:
+    msg: "The floating IP address of the NFV DNS server is {{ floating_ip_result.floating_ip.floating_ip_address }}"

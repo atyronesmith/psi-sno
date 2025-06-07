@@ -1,25 +1,12 @@
 ---
-- name: Deploy a SNO environment in PSI
+- name: Build the PSI Project ISO using include_role and tasks_from
+  # This play will target the local machine, which is common for tasks
+  # like building an ISO file. Change if your role needs to run elsewhere.
   hosts: localhost
   gather_facts: false
-  vars_files:
-    - common_vars.yml
 
   tasks:
-    - name: Read project metadata
-      ansible.builtin.include_tasks: tasks/read_metadata.yml
-
-    - name: "Ensure PSI base networking exists"
-      ansible.builtin.include_tasks: tasks/create_psi_net.yml
-
-    - name: "Create SNO network {{ project_cidr }}"
-      ansible.builtin.include_tasks: tasks/create_sno_net.yml
-
-    - name: "Create OS network {{ project_name }}-os" # noqa name[template]
-      ansible.builtin.include_tasks: tasks/create_os_net.yml
-
-    - name: "Create SNO server {{ project_name }}"
-      ansible.builtin.include_tasks: tasks/create_sno_server.yml
-
-    - name: "Attach floating IP to the SNO server {{ project_name }}"
-      ansible.builtin.include_tasks: tasks/attach_fip.yml
+    - name: Dynamically include the 'make_iso' tasks from the 'psi-project' role
+      ansible.builtin.include_role:
+        name: cluster
+        tasks_from: deploy

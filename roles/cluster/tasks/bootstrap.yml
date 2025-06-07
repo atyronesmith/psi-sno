@@ -1,0 +1,49 @@
+---
+# tasks/check_bootstrap.yml
+# Tasks to check for the existence of the installation directory
+# and wait for OpenShift bootstrap completion.
+# These tasks expect 'project_dir', 'wait_timeout_minutes', and other variables to be defined.
+
+- name: Check status of project directory
+  ansible.builtin.stat:
+    path: "{{ project_dir }}"
+  register: dir_status
+
+- name: Fail if installation directory does not exist
+  ansible.builtin.fail:
+    msg: "Required installation directory '{{ project_dir }}' does not exist or is not a directory."
+  when: not dir_status.stat.exists or not dir_status.stat.isdir
+
+- name: Wait for the OpenShift bootstrap to complete
+  ansible.builtin.command: "openshift-install wait-for bootstrap-complete --log-level=debug"
+  args:
+    chdir: "{{ project_dir }}"
+  register: bootstrap_status
+  timeout: "{{ wait_timeout_minutes * 60 }}"
+  changed_when: bootstrap_status.rc == 0
+
+- name: Bootstrap successfully completed
+  ansible.builtin.debug:
+    msg: |
+      OpenShift bootstrap successfully completed within the {{ wait_timeout_minutes }} minute time limit.
+      Return Code: {{ bootstrap_status.rc }}
+      STDOUT:
+      {{ bootstrap_status.stdout | default('(No STDOUT)') }}
+      STDERR:
+      {{ bootstrap_status.stderr | default('(No STDERR)') }}
+
+- name: Ensure server exists
+  openstack.cloud.server:
+    name: "{{ project_name }}"
+    auto_ip: false
+    state: present
+    image: "{{ project_iso_image }}"
+    flavor: "{{ sno_flavor }}"
+    volumes:
+      - "{{ project_name }}"
+    nics:
+      - port-id: "{{ sno_port_result.ports[0].id }}"
+      - port-id: "{{ os_port_result.ports[0].id }}"
+    wait: true
+    timeout: 600
+  register: server_result

@@ -1,0 +1,14 @@
+---
+- name: Dynamically include the 'read_metadata' tasks from the 'psi-project' role
+  ansible.builtin.include_role:
+    name: psi-project
+    tasks_from: read_metadata
+
+- name: Delete server
+  ansible.builtin.include_tasks:
+    file: delete_sno_server.yml
+- name: Delete SNO network
+  ansible.builtin.include_tasks: delete_sno_net.yml
+
+- name: Delete Openstack network
+  ansible.builtin.include_tasks: delete_os_net.yml

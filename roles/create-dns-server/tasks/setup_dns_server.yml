@@ -1,0 +1,118 @@
+---
+- name: Configure resolved DNS servers. Copy resolved.conf to /etc/systemd/resolved.conf
+  ansible.builtin.copy:
+    src: resolved.conf
+    dest: /etc/systemd/resolved.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Restart the systemd-resolved service
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: restarted
+    enabled: true
+    daemon_reload: true
+
+- name: Add the user 'coredns' with a specific home directory
+  ansible.builtin.user:
+    name: coredns
+    state: present
+    home: /var/lib/coredns
+
+- name: Check if coredns has been installed
+  ansible.builtin.stat:
+    path: /usr/bin/coredns
+  register: coredns_installed
+
+- name: Install required packages
+  when: not coredns_installed.stat.exists
+  block:
+    - name: Download CoreDNS binary
+      ansible.builtin.get_url:
+        url: https://github.com/coredns/coredns/releases/download/v1.12.1/coredns_1.12.1_linux_amd64.tgz
+        dest: /tmp/coredns_1.12.1_linux_amd64.tgz
+        mode: '0644'
+
+    - name: Extract CoreDNS binary into /usr/bin
+      ansible.builtin.unarchive:
+        src: /tmp/coredns_1.12.1_linux_amd64.tgz
+        dest: /usr/bin
+        remote_src: true
+        owner: coredns
+        group: coredns
+        mode: '0755'
+
+    - name: Ensure coredns binary has correct SELinux context
+      ansible.builtin.file:
+        path: /usr/bin/coredns
+        state: file
+        setype: bin_t
+
+    - name: Ensure coredns binary has correct permissions
+      community.general.capabilities:
+        path: /usr/bin/coredns
+        capability: cap_net_bind_service=+eip
+        state: present
+
+    - name: Remove the downloaded tar file
+      ansible.builtin.file:
+        path: /tmp/coredns_1.12.1_linux_amd64.tgz
+        state: absent
+
+- name: Copy file coredns.service to /etc/systemd/system
+  ansible.builtin.copy:
+    src: coredns.service
+    dest: /etc/systemd/system/coredns.service
+    owner: coredns
+    group: coredns
+    mode: '0644'
+
+- name: Copy file coredns-sysusers.conf to /usr/lib/sysusers.d
+  ansible.builtin.copy:
+    src: coredns-sysusers.conf
+    dest: /usr/lib/sysusers.d
+    owner: coredns
+    group: coredns
+    mode: '0644'
+
+- name: Copy file coredns-tmpfiles.conf to /usr/lib/tmpfiles.d
+  ansible.builtin.copy:
+    src: coredns-tmpfiles.conf
+    dest: /usr/lib/tmpfiles.d
+    owner: coredns
+    group: coredns
+    mode: '0644'
+
+- name: Ensure directory exists {{ dns_root }}
+  ansible.builtin.file:
+    path: "{{ dns_root }}"
+    state: directory
+    owner: coredns
+    group: coredns
+    mode: '0755'
+
+- name: Copy file Corefile to /etc/coredns
+  ansible.builtin.template:
+    src: Corefile.j2
+    dest: /etc/coredns/Corefile
+    mode: '0644'
+    owner: coredns
+    group: coredns
+
+- name: Copy file coredns-log.conf to /etc/logrotate.d
+  ansible.builtin.copy:
+    src: coredns-log.conf
+    dest: /etc/logrotate.d
+    mode: '0755'
+
+- name: Enable and start coredns service
+  ansible.builtin.systemd:
+    name: coredns
+    enabled: true
+    state: started
+
+- name: Install the dig utility to ease debugging
+  ansible.builtin.package:
+    name: dig
+    state: present

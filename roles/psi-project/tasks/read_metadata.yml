@@ -1,0 +1,220 @@
+# New tasks to parse metadata.json and set project_name
+#
+# VARIABLES SET BY THIS TASK FILE:
+#
+# - project_name:         The OpenShift cluster's infraID (from metadata.json), or user-selected project directory name.
+# - project_dir:          Path to the project directory (projects/{{ project_name }}).
+# - project_iso_image:    Name of the ISO image for the project ({{ sno_iso_base }}-{{ project_name }}.iso).
+# - metadata_location:    Directory containing metadata.json and ignition files for the project.
+# - metadata_json_content: Raw content of metadata.json (b64-encoded, from slurp).
+# - parsed_metadata_content: Parsed JSON content of metadata.json.
+# - cluster_metadata:     Alias for parsed_metadata_content.
+# - ignition_json_file_path: Path to the ignition config file (bootstrap-in-place-for-live-iso.ign).
+# - ignition_data:        Parsed JSON content of the ignition config.
+# - target_file_path_to_extract: Path in the ignition config to extract cluster-config.yaml.
+# - parsed_cluster_config_vars: Parsed YAML content of cluster-config.yaml from ignition.
+# - install_config_vars:  Parsed install-config.yaml data from cluster-config.yaml.
+# - project_cidr:         Cluster network CIDR (from install-config.yaml).
+# - project_domain:       Cluster base domain (from install-config.yaml).
+# - project_cluster:      Cluster name (from install-config.yaml).
+# - project_instance_ip:  Example instance IP from project_cidr (host 100).
+#
+# Additional variables for user prompts and selection:
+# - project_dir_choices:  List of available project directory names.
+# - file_choices_prompt:  Prompt string for user selection.
+# - file_basenames:       List of basenames for user selection.
+# - user_selected_index:  Index of user-selected project directory.
+#
+---
+- name: Prompt for project_name if not defined, by listing directories in 'somedir'
+  when:
+    - project_name is not defined # This entire block runs only if project_name is not initially set
+    - metadata_location is not defined # This block runs only if metadata_location is not set
+  delegate_to: localhost # Ensures the when condition for the block is evaluated on localhost
+  run_once: true
+  block:
+    - name: Find directories in 'projects' on localhost
+      ansible.builtin.find:
+        paths: "projects"  # Assumes 'somedir' is relative to where ansible is run, or an absolute path
+        file_type: directory
+        recurse: false # Only look at the top-level directories within somedir
+      register: found_project_dirs
+      delegate_to: localhost
+
+    - name: Check if any dirs were found
+      ansible.builtin.assert:
+        that:
+          - found_project_dirs.files | length > 0
+        fail_msg: "No projects found in the directory 'projects'."
+        quiet: true
+
+    - name: Extract directory basenames
+      ansible.builtin.set_fact:
+        project_dir_choices: "{{ found_project_dirs.files | map(attribute='path') | map('basename') | list }}"
+      delegate_to: localhost
+      when: found_project_dirs.files is defined and found_project_dirs.files | length > 0
+
+    - name: Fail if no project directories found in 'projects'
+      ansible.builtin.fail:
+        msg: "No project directories found in 'projects' or 'projects' does not exist. Cannot prompt for project_name."
+      when: project_dir_choices is not defined or project_dir_choices | length == 0
+      delegate_to: localhost
+
+    - name: Prepare prompt message with directory name choices
+      ansible.builtin.set_fact:
+        file_choices_prompt: |
+          Please choose a file from the list below (enter the number):
+          {% for file_item in found_project_dirs.files %}
+          {{ loop.index }}. {{ file_item.path | ansible.builtin.basename }}
+          {% endfor %}
+          Your choice:
+        # Create a list of just the basenames for easier selection later
+        file_basenames: "{{ found_project_dirs.files | map(attribute='path') | map('ansible.builtin.basename') | list }}"
+
+    - name: Display choices and prompt user for selection
+      ansible.builtin.pause:
+        prompt: "{{ file_choices_prompt }}"
+      register: user_choice_input
+
+    - name: Validate user input is a number within range
+      ansible.builtin.set_fact:
+        user_selected_index: "{{ user_choice_input.user_input | int - 1 }}" # Convert to 0-based index
+      failed_when: >
+        (user_choice_input.user_input | int < 1) or
+        (user_choice_input.user_input | int > file_basenames | length) or
+        (user_choice_input.user_input != (user_choice_input.user_input | int | string))
+      # The last condition checks if the input was indeed a whole number string
+      # More robust validation might be needed for non-numeric input if not handled by int filter.
+
+    - name: Determine the selected file
+      ansible.builtin.set_fact:
+        project_name: "{{ file_basenames[user_selected_index | int] }}"
+      when: user_selected_index is defined
+
+- name: Set metadata_location using project_name if metadata_location is not defined
+  ansible.builtin.set_fact:
+    metadata_location: "{{ playbook_dir }}/projects/{{ project_name }}"
+  when:
+    - metadata_location is not defined
+    - project_name is defined # This 'project_name' must be an initial input or from a prior play/set_fact
+  delegate_to: localhost
+  run_once: true
+
+- name: Read metadata.json from the temporary installation directory
+  ansible.builtin.slurp:
+    src: "{{ metadata_location }}/metadata.json"
+  register: metadata_json_content
+  when: metadata_location is defined
+  delegate_to: localhost
+  # This task should run even if the 'creates' condition of the previous task was met,
+  # as metadata.json should exist if ignition config was successfully created (or already existed).
+- name: Attempt to parse metadata.json and set facts
+  when: metadata_json_content.content is defined and metadata_json_content.content | trim != ""
+  delegate_to: localhost
+  block:
+    - name: Decode and parse metadata.json
+      ansible.builtin.set_fact:
+        parsed_metadata_content: "{{ metadata_json_content.content | b64decode | from_json }}"
+      delegate_to: localhost
+
+    - name: Validate infraID exists in parsed metadata
+      ansible.builtin.fail:
+        msg: "The 'infraID' key was not found in the parsed metadata.json. Parsed content: {{ parsed_metadata_content }}"
+      when: parsed_metadata_content.infraID is not defined or parsed_metadata_content.infraID | trim == ""
+      delegate_to: localhost
+
+    - name: Set project_name (from infraID) and other project-related facts
+      ansible.builtin.set_fact:
+        project_name: "{{ parsed_metadata_content.infraID }}" # This overrides any initial/chosen project_name
+        cluster_metadata: "{{ parsed_metadata_content }}"
+        project_dir: "projects/{{ parsed_metadata_content.infraID }}" # 'projects/' is a different base dir for outputs
+        project_iso_image: "{{ sno_iso_base | default('sno-image-base') }}-{{ parsed_metadata_content.infraID }}.iso"
+      delegate_to: localhost
+      when: parsed_metadata_content.infraID is defined
+
+  rescue:
+    - name: Handle JSON parsing error
+      ansible.builtin.fail:
+        msg: |
+          Failed to decode Base64 or parse JSON from metadata.json.
+          Error: {{ ansible_failed_result.msg | default('Unknown parsing error') }}
+          Content (first 100 chars of b64 content): {{ metadata_json_content.content[:100] if metadata_json_content.content is defined else 'N/A' }}
+      delegate_to: localhost
+
+- name: Set the path for the Ignition JSON file
+  ansible.builtin.set_fact:
+    ignition_json_file_path: "{{ metadata_location }}/bootstrap-in-place-for-live-iso.ign"
+  when: metadata_location is defined
+  delegate_to: localhost
+
+- name: Read and parse the Ignition JSON file from the control node
+  ansible.builtin.set_fact:
+    ignition_data: "{{ lookup('ansible.builtin.file', ignition_json_file_path) | from_json }}"
+  run_once: true # If playbook targets multiple hosts, read and parse the file only once
+  delegate_to: localhost # This task runs on the control node
+
+- name: Assert that storage.files exists and is a list
+  ansible.builtin.assert:
+    that:
+      - ignition_data is defined
+      - ignition_data.storage is defined
+      - ignition_data.storage.files is defined
+      - ignition_data.storage.files is iterable
+    fail_msg: "The JSON file at '{{ ignition_json_file_path }}' does not contain a valid 'storage.files' array."
+    quiet: true # Suppress output on successful assertion
+
+- name: Set the target file path to extract
+  ansible.builtin.set_fact:
+    target_file_path_to_extract: "/opt/openshift/manifests/cluster-config.yaml"
+  when: metadata_location is defined
+  delegate_to: localhost
+
+# Assume that the cluster-config.yaml file is a complete file and not a partial/append
+- name: Process the specified file entry from the Ignition configuration
+  ansible.builtin.set_fact:
+    parsed_cluster_config_vars: "{{ _decoded_content_cs | from_yaml }}"
+  loop: "{{ ignition_data.storage.files }}"
+  loop_control:
+    label: "{{ item.path }}" # Use file path as the loop item label for better logging
+
+  # This 'when' condition ensures the loop body only processes the targeted file path
+  when:
+    - item.path == target_file_path_to_extract
+    - item.contents is defined
+    - item.contents.source is defined
+  vars:
+    _source_uri_cs: "{{ item.contents.source }}"
+    _base64_data_match_cs: "{{ _source_uri_cs | regex_search('^data:[^;]*?(?:;charset=[^;]+?)?;base64,(.+)$', '\\1') }}"
+    _decoded_content_cs: >-
+      {{
+        _base64_data_match_cs[0] | b64decode
+        if _base64_data_match_cs and _base64_data_match_cs[0] is defined
+        else ""
+      }}
+
+- name: Extract install-config.yaml from parsed_cluster_config_vars
+  ansible.builtin.set_fact:
+    install_config_vars: "{{ parsed_cluster_config_vars.data['install-config'] | from_yaml }}"
+  when:
+    - parsed_cluster_config_vars is defined
+    - parsed_cluster_config_vars | trim != ""
+    - parsed_cluster_config_vars.data is defined
+    - parsed_cluster_config_vars.data['install-config'] is defined
+
+- name: Set variables from install-config.yaml
+  ansible.builtin.set_fact:
+    project_cidr: "{{ install_config_vars.networking.machineNetwork[0].cidr }}"
+    project_domain: "{{ install_config_vars.baseDomain }}"
+    project_cluster: "{{ install_config_vars.metadata.name }}"
+
+- name: Set variables from install-config.yaml
+  ansible.builtin.set_fact:
+    project_instance_ip: "{{ project_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
+
+- name: Display Server Information
+  ansible.builtin.debug:
+    msg:
+      - "Project Name: {{ project_name }}"
+      - "Project Domain: {{ project_domain }}"
+      - "Project Cluster: {{ project_cluster }}"
+      - "Project CIDR: {{ project_cidr }}"

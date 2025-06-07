@@ -1,0 +1,12 @@
+---
+- name: Import deploy DNS server tasks
+  ansible.builtin.import_tasks:
+    file: deploy_dns_server.yml
+  tags: deploy
+
+- name: Import setup DNS server tasks
+  ansible.builtin.import_tasks:
+    file: setup_dns_server.yml
+  become: true
+  tags: setup
+  delegate_to: "{{ dns_fip }}"

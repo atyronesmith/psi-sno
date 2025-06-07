@@ -1,0 +1,11 @@
+---
+- name: Include role psi-project
+  ansible.builtin.include_role:
+    name: psi-project
+  tasks_from: read_metadata
+
+- name: Include tasks for configuring remote DNS
+  ansible.builtin.import_tasks: remote_dns.yml
+
+- name: Include tasks for configuring local DNS
+  ansible.builtin.import_tasks: local_dns.yml
