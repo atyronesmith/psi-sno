@@ -156,11 +156,24 @@
   when: project_name is defined and metadata_json_content.content is defined and (metadata_json_content.content | b64decode | from_json).infraID is defined
   delegate_to: localhost
 
+- name: Upload an image from a local file named {{ project_dir }}/{{ project_iso_image }} # noqa name[template]
+  openstack.cloud.image:
+    name: "{{ project_iso_image }}"
+    container_format: bare
+    disk_format: iso
+    state: present
+    filename: "{{ project_dir }}/{{ project_iso_image }}"
+    timeout: 300
+    sdk_log_path: "{{ playbook_dir }}/openstack_sdk.log"
+    sdk_log_level: DEBUG
+  register: image_upload_result
+
 - name: Output formatted OpenStack command to upload ISO
   ansible.builtin.debug:
     msg: "{{ image_command | split('\n') }}"
   vars:
     image_command: |
+      Image upload failed.  Please use the following command to upload the ISO image manually:
       ----------------------------------------------------------------------
       OpenStack ISO Upload Command
       ----------------------------------------------------------------------
@@ -170,3 +183,4 @@
       - Ensure you are logged into your OpenStack environment (source your RC file).
       - The '--file' path should be accessible from where you run the command.
       ----------------------------------------------------------------------
+  when: image_upload_result is failed or (image_upload_result is defined and image_upload_result.failed | default(false))
