@@ -1,0 +1,17 @@
+---
+# dev environment overrides
+environment_name: "dev"
+
+# Use smaller resources for development
+sno_flavor: "g.memory.large"
+sno_volume_size: 80
+
+# Development DNS server
+dns_fip: "10.0.108.150"
+
+# Development network ranges
+project_openstack_cidr: "192.168.100.0/24"
+
+# Faster timeouts for development
+bootstrap_timeout_minutes: 20
+wait_timeout_minutes: 15

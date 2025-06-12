@@ -7,3 +7,35 @@ cr-gen
 secrets
 projects
 
+
+# Build artifacts
+build/
+secrets/*.txt
+secrets/*.pub
+secrets/*.pem
+secrets/*.key
+!secrets/*.example
+!secrets/.keep
+
+# Generated configs
+generated/
+*.retry
+.ansible/
+**/__pycache__/
+*.pyc
+
+# Build artifacts
+build/
+secrets/*.txt
+secrets/*.pub
+secrets/*.pem
+secrets/*.key
+!secrets/*.example
+!secrets/.keep
+
+# Generated configs
+generated/
+*.retry
+.ansible/
+**/__pycache__/
+*.pyc

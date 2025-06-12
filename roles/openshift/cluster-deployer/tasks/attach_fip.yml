@@ -1,0 +1,45 @@
+---
+- name: Assert required variables are defined for floating IP attachment
+  ansible.builtin.assert:
+    that:
+    quiet: true
+      - project_instance_ip is defined
+      - project_instance_ip_os is defined
+      - project_name is defined
+      - project_provider_network is defined
+    fail_msg: "One or more required variables (project_instance_ip, project_instance_ip_os, project_name, project_provider_network) are not defined."
+
+- name: Create/attach floating IP to the sno network server interface on {{ project_instance_ip }}
+  openstack.cloud.floating_ip:
+    state: present
+    reuse: true
+    server: "{{ project_name }}" # Name of the server to associate FIP with
+    network: "{{ project_provider_network }}" # External network to allocate FIP from
+    nat_destination: "{{ project_name }}" # NAT destination for the floating IP
+    fixed_address: "{{ project_instance_ip }}"
+    wait: false
+    sdk_log_path: "{{ playbook_dir }}/openstack_sdk.log"
+    sdk_log_level: DEBUG
+    timeout: 120
+  register: floating_ip_result
+
+- name: Create/attach floating IP to the openstack network server interface on {{ project_instance_ip_os }}
+  openstack.cloud.floating_ip:
+    state: present
+    reuse: true
+    server: "{{ project_name }}"
+    network: "{{ project_provider_network }}"
+    nat_destination: "{{ project_name }}-os"
+    fixed_address: "{{ project_instance_ip_os }}"
+    wait: false
+    sdk_log_path: "{{ playbook_dir }}/openstack_sdk.log"
+    sdk_log_level: DEBUG
+    timeout: 180
+  register: floating_ip_result_os
+
+- name: Display Floating IP
+  ansible.builtin.debug:
+    msg:
+      - "Allocated/Associated os net floating IP: {{ floating_ip_result_os.floating_ip.floating_ip_address }}"
+      - "Allocated/Associated sno net floating IP: {{ floating_ip_result.floating_ip.floating_ip_address }}"
+  when: floating_ip_result.floating_ip.floating_ip_address is defined

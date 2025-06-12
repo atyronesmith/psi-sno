@@ -1,0 +1,33 @@
+---
+- name: Validate OpenStack connectivity
+  openstack.cloud.auth:
+  register: os_auth
+  failed_when: false
+
+- name: Fail if OpenStack authentication failed
+  ansible.builtin.fail:
+    msg: "OpenStack authentication failed. Please check your credentials."
+  when: os_auth.failed | default(false)
+
+- name: Validate required OpenStack resources exist
+  block:
+    - name: Check if provider network exists
+      openstack.cloud.networks_info:
+        name: "{{ project_provider_network }}"
+      register: provider_net_check
+      
+    - name: Fail if provider network doesn't exist
+      ansible.builtin.fail:
+        msg: "Provider network '{{ project_provider_network }}' not found"
+      when: provider_net_check.networks | length == 0
+
+- name: Validate required files exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: file_check
+  failed_when: not file_check.stat.exists
+  loop:
+    - "{{ playbook_dir }}/../secrets/pull-secret.txt"
+    - "{{ playbook_dir }}/../secrets/ssh-key.pub"
+  loop_control:
+    label: "{{ item }}"

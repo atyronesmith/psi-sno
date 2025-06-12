@@ -1,0 +1,12 @@
+---
+- name: Build the PSI Project ISO using include_role and tasks_from
+  # This play will target the local machine, which is common for tasks
+  # like building an ISO file. Change if your role needs to run elsewhere.
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Dynamically include the 'make_iso' tasks from the 'psi-project' role
+      ansible.builtin.include_role:
+        name: cluster
+        tasks_from: deploy

@@ -1,0 +1,120 @@
+- name: "Gather info about the port '{{ project_name }}'"
+  openstack.cloud.port_info:
+    port: "{{ project_name }}"
+    # network: "{{ project_name }}" # Optionally specify network if port name not unique
+  register: port_info_check
+  ignore_errors: true # Continue if port is already gone
+
+- name: "Delete port '{{ project_name }}'"
+  openstack.cloud.port:
+    state: absent
+    name: "{{ project_name }}"
+    # network: "{{ project_name }}" # Optionally specify network
+    # fixed_ips: # Optionally specify fixed_ips for more precise targeting if needed
+    #   - subnet: "{{ project_name }}"
+    #     ip_address: "{{ project_instance_ip }}"
+  when: port_info_check.ports | length > 0 # Only if port exists
+  register: port_delete_result
+
+- name: "Gather info about the router '{{ project_name }}' to check its interfaces"
+  openstack.cloud.routers_info:
+    name: "{{ project_name }}"
+  register: router_info_check
+  ignore_errors: true
+
+- name: "Detach subnet '{{ project_name }}' from router '{{ project_name }}'"
+  openstack.cloud.router:
+    name: "{{ project_name }}"
+    interfaces:
+      - net: "{{ project_name }}"
+        subnet: "{{ project_name }}"
+    state: absent
+  when: router_info_check.routers | length > 0 # Only if router exists
+  register: router_interface_delete_result
+
+- name: "Delete router '{{ project_name }}'"
+  openstack.cloud.router:
+    state: absent
+    name: "{{ project_name }}"
+  # The external gateway association is removed when the router is deleted.
+  register: router_delete_result
+- name: "Gather info about the subnet '{{ project_name }}'"
+
+  openstack.cloud.subnets_info:
+    name: "{{ project_name }}"
+    # network_name: "{{ project_name }}" # Optionally specify network if subnet name not unique
+  register: subnet_info_check
+  ignore_errors: true
+
+- name: "Delete subnet '{{ project_name }}'"
+  openstack.cloud.subnet:
+    state: absent
+    name: "{{ project_name }}"
+    # network_name: "{{ project_name }}" # Optionally specify network
+    # cidr: "{{ project_cidr }}" # Optionally specify CIDR for precise targeting
+  when: subnet_info_check.subnets | length > 0 # Only if subnet exists
+  register: subnet_delete_result
+
+- name: "Gather info about the network '{{ project_name }}'"
+  openstack.cloud.networks_info:
+    name: "{{ project_name }}"
+  register: network_info_check
+  ignore_errors: true
+
+- name: "Delete network '{{ project_name }}'"
+  openstack.cloud.network:
+    state: absent
+    name: "{{ project_name }}"
+  when: network_info_check.networks | length > 0 # Only if network exists
+  register: network_delete_result
+
+- name: "Gather info about the security group '{{ project_name }}'"
+  openstack.cloud.security_group_info:
+    name: "{{ project_name }}"
+  register: sg_info_check
+  ignore_errors: true
+- name: "Delete security group '{{ project_name }}'"
+  openstack.cloud.security_group:
+    state: absent
+    name: "{{ project_name }}"
+  when: sg_info_check.security_groups | length > 0 # Only if security group exists
+  # Deleting a security group also deletes all its rules.
+  register: sg_delete_result
+- name: "Deletion summary"
+  ansible.builtin.debug:
+    msg:
+      - >
+        Port '{{ project_name }}' deletion status: {{
+        'Succeeded' if port_delete_result.changed else
+        ('Already absent' if port_info_check.ports | length == 0
+         else 'Check logs')
+        }}
+      - >
+        Router interface for subnet '{{ project_name }}' on router
+        '{{ project_name }}' deletion status: {{
+        'Succeeded' if router_interface_delete_result.changed else
+        'Check logs or already absent'
+        }}
+      - >
+        Router '{{ project_name }}' deletion status: {{
+        'Succeeded' if router_delete_result.changed else
+        'Check logs or already absent'
+        }}
+      - >
+        Subnet '{{ project_name }}' deletion status: {{
+        'Succeeded' if subnet_delete_result.changed else
+        ('Already absent' if subnet_info_check.subnets | length == 0
+        else 'Check logs')
+        }}
+      - >
+        Network '{{ project_name }}' deletion status: {{
+        'Succeeded' if network_delete_result.changed else
+        ('Already absent' if network_info_check.networks | length == 0
+        else 'Check logs')
+        }}
+      - >
+        Security group '{{ project_name }}' deletion status: {{
+        'Succeeded' if sg_delete_result.changed else
+        ('Already absent' if sg_info_check.security_groups | length == 0
+        else 'Check logs')
+        }}

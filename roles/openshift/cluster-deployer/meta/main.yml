@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: PSI SNO Team
+  description: cluster-deployer role for PSI SNO deployments
+  company: Red Hat
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+  galaxy_tags:
+    - openstack
+    - openshift
+    - sno
+
+dependencies: []

@@ -1,10 +1,1 @@
----
-- name: Remove the sno network and related resources
-  hosts: localhost
-  gather_facts: false
-
-  tasks:
-    - name: Run destroy tasks from cluster role
-      ansible.builtin.include_role:
-        name: cluster
-        tasks_from: destroy
+playbooks/destroy.yml

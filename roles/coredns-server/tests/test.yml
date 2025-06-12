@@ -1,0 +1,7 @@
+---
+- name: Test CoreDNS Server
+  hosts: localhost
+  remote_user: root
+  roles:
+    - coredns-server
+

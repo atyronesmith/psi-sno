@@ -1,0 +1,24 @@
+---
+exclude_paths:
+  - build/
+  - secrets/
+  - .github/
+  - docs/
+  - tests/molecule/
+  - '**/molecule/'
+  - '**/*.md'
+
+skip_list:
+  - yaml[line-length]
+  - name[casing]
+  - var-naming[no-role-prefix]
+
+use_default_rules: true
+
+warn_list:
+  - experimental
+  - ignore-errors
+
+offline: false
+
+verbosity: 1

@@ -1,7 +1,0 @@
----
-# defaults file for psi-project
-ocp_arch: "x86_64"
-
-iso_dir: "{{ playbook_dir }}/iso"
-sno_iso_image_name: "rhcos-live.iso"
-sno_iso_base: "rhcos-live"

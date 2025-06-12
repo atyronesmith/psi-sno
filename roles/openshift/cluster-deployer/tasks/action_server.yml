@@ -1,0 +1,30 @@
+# Tasks to perform server actions (hard-reboot, rebuild) on an OpenStack server.
+# To extend supported actions, modify the 'allowed_server_actions' variable below.
+---
+- name: Define allowed server actions
+  ansible.builtin.set_fact:
+    allowed_server_actions:
+      - hard-reboot
+      - rebuild
+
+- name: Perform action '{{ server_action }}' on server '{{ project_name }}' # noqa: name[template]
+  openstack.cloud.server_action:
+    server: "{{ project_name }}" # Prefer using ID for actions
+    action: "{{ server_action }}"
+    wait: true
+    timeout: 180
+  register: server_reset_result
+  when:
+    - project_name is defined
+    - server_action is defined
+    - server_action in allowed_server_actions
+
+- name: Display server action result
+  ansible.builtin.debug:
+    msg: "Action '{{ server_action }}' initiated for server '{{ project_name }}'."
+  when: server_reset_result is defined and not server_reset_result.failed
+
+- name: Handle failure in server action
+  ansible.builtin.fail:
+    msg: "Failed to initiate '{{ server_action }}' for server '{{ project_name }}'. Result: {{ server_reset_result }}"
+  when: server_reset_result is defined and server_reset_result.failed

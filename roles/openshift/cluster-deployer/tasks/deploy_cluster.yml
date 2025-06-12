@@ -1,0 +1,40 @@
+---
+# tasks file for deploy_cluster
+
+- name: Dynamically include the 'read_metadata' tasks from the 'psi-project' role
+  ansible.builtin.include_role:
+    name: psi-project
+    tasks_from: read_metadata
+
+- name: Ensure PSI base networking exists
+  ansible.builtin.include_tasks: create_psi_net.yml
+
+- name: Create SNO network {{ project_cidr }}
+  ansible.builtin.include_tasks: create_sno_net.yml
+
+- name: Create OS network {{ project_name }}-os
+  ansible.builtin.include_tasks: create_os_net.yml
+
+- name: Create SNO bootstrap server {{ project_name }}
+  ansible.builtin.include_tasks: create_sno_bootstrap.yml
+
+- name: Attach floating IP to the SNO server {{ project_name }}
+  ansible.builtin.include_tasks: attach_fip.yml
+
+- name: Get floating IP for cluster
+  ansible.builtin.include_tasks: get_server_fip.yml
+
+- name: Dynamically include the 'add-dns-cluster' role tasks
+  ansible.builtin.include_role:
+    name: add-dns-cluster
+
+- name: Display final configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "SNO server '{{ project_name }}' created with IP '{{ project_instance_ip_sno }}'."
+      - "Floating IP '{{ project_fip }}' attached to the SNO server."
+      - "OpenStack network '{{ project_name }}-os' created with subnet '{{ project_name }}-os' ({{ project_openstack_cidr }})."
+      - "PSI base networking and SNO network configured successfully."
+
+- name: Include action server tasks
+  ansible.builtin.include_tasks: action_server.yml
