@@ -1,5 +1,0 @@
----
-# defaults file for create-server
-keyname: "nextgen"
-image_name: "Fedora-Cloud-Base-42-latest"
-image_url: "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-42-latest.x86_64.qcow2"

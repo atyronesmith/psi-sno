@@ -1,0 +1,58 @@
+---
+# Global configuration for PSI SNO deployments
+
+# ============================================================================
+# OpenStack Configuration
+# ============================================================================
+project_provider_network: "provider_net_shared_3"
+
+# Security groups
+psi_sno_sg_sno: "sno-psi-sg-sno"
+psi_sno_sg_openstack: "sno-psi-sg-openstack"
+psi_sno_router_sno: "sno-psi-router"
+
+# Network configuration
+project_openstack_cidr: "192.168.200.0/24"
+project_instance_ip_os: "{{ (project_openstack_cidr | ansible.utils.ipaddr('100')) | ansible.utils.ipaddr('address') }}"
+
+# ============================================================================
+# Compute Configuration
+# ============================================================================
+sno_flavor: "g.memory.xxl"
+sno_volume_size: 120
+
+# ============================================================================
+# OpenShift Configuration
+# ============================================================================
+ocp_version: "4.18.10"
+ocp_arch: "x86_64"
+
+# Build directories
+iso_dir: "{{ playbook_dir }}/../build/isos"
+project_build_dir: "{{ playbook_dir }}/../build/projects"
+
+# ISO configuration
+sno_iso_image_name: "rhcos-live.iso"
+sno_iso_base: "rhcos-live"
+
+# ============================================================================
+# Machine Config Generation
+# ============================================================================
+butane_templates_dir: "../configs/openshift/machine-configs/butane"
+ignition_output_dir: "../build/generated"
+butane_executable: "butane"
+
+# ============================================================================
+# DNS Configuration
+# ============================================================================
+dns_name: "nfv-dns"
+dns_cidr: "192.168.100.0/24"
+dns_instance_ip: "{{ dns_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
+dns_fip: "10.0.108.151"
+dns_root: "/etc/coredns/clusters"
+
+# ============================================================================
+# Timeouts and Retry Configuration
+# ============================================================================
+bootstrap_timeout_minutes: 30
+wait_timeout_minutes: 30

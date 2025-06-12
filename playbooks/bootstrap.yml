@@ -1,0 +1,18 @@
+---
+- name: Wait for OpenShift Bootstrap Completion
+  hosts: localhost          # This playbook runs tasks on the Ansible control node
+  gather_facts: false     # No need to gather facts from localhost for this task
+  connection: local       # Ensures modules run locally
+  vars_files:
+    - common_vars.yml        # Load variables from an external file (if needed)
+  vars:
+    wait_timeout_minutes: 10
+    # Define the directory where your OpenShift installation configuration files
+    # (e.g., install-config.yaml, auth/, etc.) are located.
+
+  tasks:
+    - name: Read project metadata
+      ansible.builtin.include_tasks: tasks/read_metadata.yml
+
+    - name: "Include tasks/check_bootstrap.yml tasks"
+      ansible.builtin.include_tasks: tasks/check_bootstrap.yml

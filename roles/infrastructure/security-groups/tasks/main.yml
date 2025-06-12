@@ -1,0 +1,6 @@
+---
+- name: Create SNO security groups
+  ansible.builtin.include_tasks: create_sno_security_groups.yml
+
+- name: Create OpenStack security groups  
+  ansible.builtin.include_tasks: create_openstack_security_groups.yml

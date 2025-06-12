@@ -1,0 +1,3 @@
+---
+# staging environment overrides
+environment_name: "staging"

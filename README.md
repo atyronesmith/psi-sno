@@ -1,286 +1,312 @@
-# PSI SNO Deployment Guide
+# PSI SNO Deployment Automation
 
-A comprehensive guide for deploying Single-Node OpenShift (SNO) clusters with Red Hat OpenStack Services on OpenShift (RHOSO) in Red Hat's PSI environment.
+[![Ansible Lint](https://github.com/your-org/psi-sno/workflows/Ansible%20Lint/badge.svg)](https://github.com/your-org/psi-sno/actions)
 
-## Table of Contents
+Automated deployment of Single-Node OpenShift (SNO) clusters with Red Hat OpenStack Services on OpenShift (RHOSO) in Red Hat's PSI environment.
 
-- [Prerequisites](#prerequisites)
-- [Repository Structure](#repository-structure)
-- [Initial Setup](#initial-setup)
-- [Configuration](#configuration)
-- [Deployment Workflow](#deployment-workflow)
-- [DNS Configuration](#dns-configuration)
-- [Post-Deployment Operations](#post-deployment-operations)
-- [Troubleshooting](#troubleshooting)
-- [Cleanup](#cleanup)
-
-## Prerequisites
-
-### Required Tools
-
-- **Ansible** (2.9+) with required collections:
-  ```bash
-  ansible-galaxy collection install openstack.cloud
-  ansible-galaxy collection install community.general
-  ```
-
-- **OpenShift CLI Tools:**
-  - `openshift-install` (4.18.10+)
-  - `oc` client
-
-- **Container Runtime:**
-  - Podman (for coreos-installer)
-
-- **OpenStack CLI:**
-  - `python-openstackclient`
-  - Valid OpenStack credentials sourced
-
-### Environment Setup
-
-1. **Source OpenStack credentials:**
-   ```bash
-   source ~/psi-openrc.sh
-   ```
-
-2. **Verify OpenStack connectivity:**
-   ```bash
-   openstack server list
-   ```
-
-3. **Install required Ansible collections:**
-   ```bash
-   ansible-galaxy collection install -r requirements.yml
-   ```
-
-## Repository Structure
-
-```
-psi-sno/
-├── README.md
-├── deploy.yml                    # Main deployment playbook
-├── destroy.yml                   # Cleanup playbook
-├── bootstrap.yml                 # Bootstrap operations
-├── group_vars/
-│   └── all.yaml                  # Global configuration
-├── install-configs/              # OpenShift install configurations
-├── roles/                        # Ansible roles
-│   ├── psi-project/             # ISO creation and project management
-│   ├── cluster/                 # Infrastructure deployment
-│   ├── add-dns-cluster/         # DNS configuration
-│   └── create-dns-server/       # DNS server deployment
-├── cr/                          # Kubernetes custom resources
-├── butane/                      # Machine config templates
-├── projects/                    # Generated project directories
-└── iso/                         # Downloaded RHCOS ISOs
-```
-
-## Initial Setup
-
-### 1. Clone and Configure Repository
+## 🚀 Quick Start
 
 ```bash
+# 1. Clone and setup
 git clone <repository-url> psi-sno
 cd psi-sno
+
+# 2. Install dependencies
+make install-deps
+
+# 3. Configure secrets
+cp secrets/pull-secret.txt.example secrets/pull-secret.txt
+cp secrets/ssh-key.pub.example secrets/ssh-key.pub
+# Edit files with your actual secrets
+
+# 4. Source OpenStack credentials
+#source ~/psi-openrc.sh
+This repo assumes a cloud.yaml exists and that OS_CLOUD is set to the PSI cloud
+
+# 5. Deploy to development
+make deploy-dev
 ```
 
-### 2. Create Secrets Directory
+## 📁 Repository Structure
+
+```
+├── 📄 README.md                    # This file
+├── 📄 ansible.cfg                  # Ansible configuration
+├── 📄 requirements.yml             # Ansible collection requirements
+├── 📄 Makefile                     # Common tasks automation
+├── 📄 .ansible-lint                # Ansible lint configuration
+├── 📄 .yamllint                    # YAML lint configuration
+│
+├── 📁 docs/                        # Documentation
+│   ├── 📄 deployment-guide.md
+│   ├── 📄 troubleshooting.md
+│   └── 📁 examples/
+│
+├── 📁 playbooks/                   # Ansible playbooks
+│   ├── 📄 deploy.yml               # Main deployment playbook
+│   ├── 📄 destroy.yml              # Environment cleanup
+│   ├── 📄 bootstrap.yml            # Cluster bootstrap
+│   ├── 📄 create-iso.yml           # ISO creation
+│   └── 📁 maintenance/             # Maintenance playbooks
+│
+├── 📁 inventory/                   # Inventory management
+│   ├── 📁 group_vars/              # Global variables
+│   ├── 📁 host_vars/               # Host-specific variables
+│   └── 📁 environments/            # Environment configs
+│       ├── 📁 dev/                 # Development environment
+│       ├── 📁 staging/             # Staging environment
+│       └── 📁 prod/                # Production environment
+│
+├── 📁 roles/                       # Ansible roles
+│   ├── 📁 common/                  # Shared utilities
+│   ├── 📁 openshift/               # OpenShift-specific roles
+│   │   ├── 📁 iso-builder/         # ISO creation and management
+│   │   ├── 📁 cluster-deployer/    # Cluster deployment
+│   │   └── 📁 bootstrap/           # Bootstrap operations
+│   ├── 📁 infrastructure/          # Infrastructure roles
+│   │   ├── 📁 openstack-networks/  # Network management
+│   │   ├── 📁 security-groups/     # Security configuration
+│   │   └── 📁 floating-ips/        # IP management
+│   └── 📁 dns/                     # DNS management
+│       ├── 📁 coredns-server/      # DNS server deployment
+│       └── 📁 cluster-dns/         # Cluster DNS configuration
+│
+├── 📁 configs/                     # Configuration templates
+│   ├── 📁 openshift/               # OpenShift configurations
+│   │   ├── 📁 install-configs/     # Installation configurations
+│   │   └── 📁 machine-configs/     # Machine configurations
+│   ├── 📁 kubernetes/              # Kubernetes manifests
+│   │   ├── 📁 networking/          # Network configurations
+│   │   ├── 📁 storage/             # Storage configurations
+│   │   └── 📁 monitoring/          # Monitoring setup
+│   └── 📁 infrastructure/          # Infrastructure configs
+│
+├── 📁 scripts/                     # Utility scripts
+│   └── 📁 helpers/                 # Helper scripts
+│
+├── 📁 tests/                       # Testing framework
+│   ├── 📁 unit/                    # Unit tests
+│   ├── 📁 integration/             # Integration tests
+│   └── 📁 molecule/                # Molecule testing
+│
+├── 📁 build/                       # Build artifacts (gitignored)
+│   ├── 📁 isos/                    # Generated ISO files
+│   ├── 📁 projects/                # Project directories
+│   └── 📁 generated/               # Generated configurations
+│
+└── 📁 secrets/                     # Secrets (gitignored)
+    ├── 📄 .keep
+    ├── 📄 pull-secret.txt.example
+    └── 📄 ssh-key.pub.example
+```
+
+## 🛠️ Prerequisites
+
+### Required Tools
+- **Ansible** (2.14+) with collections:
+  ```bash
+  pip install ansible-core ansible-lint yamllint
+  ansible-galaxy collection install -r requirements.yml
+  ```
+- **OpenShift CLI Tools**: `openshift-install`, `oc`
+- **Container Runtime**: Podman (for coreos-installer)
+- **OpenStack CLI**: `python-openstackclient`
+
+### Environment Setup
+```bash
+# Source OpenStack credentials
+source ~/psi-openrc.sh
+
+# Verify connectivity
+openstack server list
+```
+
+## 🎯 Usage
+
+### Environment Management
+
+Deploy to different environments using environment-specific inventories:
 
 ```bash
-mkdir -p secrets
+# Development environment
+make deploy-dev
+ansible-playbook -i inventory/environments/dev playbooks/deploy.yml
+
+# Staging environment
+ansible-playbook -i inventory/environments/staging playbooks/deploy.yml
+
+# Production environment
+ansible-playbook -i inventory/environments/prod playbooks/deploy.yml
 ```
 
-### 3. Add Required Secrets
+### Common Operations
 
-**Pull Secret:**
 ```bash
-# Get from https://console.redhat.com/openshift/install/pull-secret
-cp ~/pull-secret.txt secrets/pull-secret.txt
+# Create installation ISO
+make create-iso-dev
+ansible-playbook playbooks/create-iso.yml
+
+# Bootstrap cluster
+make bootstrap-dev
+ansible-playbook playbooks/bootstrap.yml
+
+# Get cluster information
+ansible-playbook playbooks/maintenance/get-cluster-info.yml
+
+# Start/Stop cluster
+ansible-playbook playbooks/maintenance/start-cluster.yml
+ansible-playbook playbooks/maintenance/stop-cluster.yml
+
+# Destroy environment
+make destroy-dev
+ansible-playbook playbooks/destroy.yml
 ```
 
-**SSH Key:**
+### Development Workflow
+
 ```bash
-cp ~/.ssh/id_rsa.pub secrets/id_rsa.pub
+# Install dependencies
+make install-deps
+
+# Run linting
+make lint
+
+# Run syntax check
+make syntax-check
+
+# Run all tests
+make test
+
+# Clean build artifacts
+make clean
 ```
 
-### 4. Review Global Configuration
+## ⚙️ Configuration
 
-Edit `group_vars/all.yaml` to match your environment:
+### Global Configuration
+
+Edit `inventory/group_vars/all.yml` for global settings:
 
 ```yaml
-# PSI provider network
+# OpenStack Configuration
 project_provider_network: "provider_net_shared_3"
-
-# OpenShift version
-ocp_version: "4.18.10"
-
-# Instance flavors
 sno_flavor: "g.memory.xxl"
 sno_volume_size: 120
 
-# DNS configuration
-dns_fip: "10.0.108.151"  # Your DNS server floating IP
+# OpenShift Configuration
+ocp_version: "4.18.10"
+
+# DNS Configuration
+dns_fip: "10.0.108.151"
 ```
 
-## Configuration
+### Environment-Specific Configuration
 
-### 1. Create Install Configuration
+Override settings in `inventory/environments/{env}/group_vars/all.yml`:
 
-Create a new install config in `install-configs/`:
-
-```bash
-cp install-configs/nfv-sno2-install-config.yaml install-configs/my-cluster-install-config.yaml
+```yaml
+# Development overrides
+sno_flavor: "g.memory.large"
+sno_volume_size: 80
+bootstrap_timeout_minutes: 20
 ```
 
-Edit the configuration:
+### OpenShift Install Configuration
+
+Create install configurations in `configs/openshift/install-configs/examples/`:
 
 ```yaml
 apiVersion: v1
 baseDomain: nfv.com
 metadata:
-  name: my-cluster  # Your cluster name
+  name: my-cluster
 networking:
   machineNetwork:
-  - cidr: 192.168.150.0/24  # Your desired network CIDR
+  - cidr: 192.168.150.0/24
 # ... rest of configuration
 ```
 
-### 2. Update Network Configuration (Optional)
+## 🔐 Secrets Management
 
-If you need custom networking, edit `cr/networking.yaml` and `cr/nncp.yaml` to match your requirements.
+### Setup Secrets
 
-## Deployment Workflow
-
-### Step 1: Create Project ISO
-
-Generate the OpenShift installation ISO:
-
-```bash
-ansible-playbook create_project_iso.yml
-```
-
-**What this does:**
-- Prompts you to select an install config
-- Downloads RHCOS live ISO if needed
-- Creates ignition configuration
-- Embeds ignition into ISO
-- Prepares project directory
-
-### Step 2: Deploy Infrastructure
-
-Deploy the complete infrastructure stack:
-
-```bash
-ansible-playbook deploy.yml
-```
-
-**What this creates:**
-- OpenStack networks (SNO and OpenStack networks)
-- Security groups
-- Floating IPs
-- Bootable volumes
-- Compute instances
-- DNS records
-
-### Step 3: Bootstrap Cluster
-
-Wait for and verify cluster bootstrap:
-
-```bash
-ansible-playbook bootstrap.yml
-```
-
-**What this does:**
-- Waits for OpenShift bootstrap completion
-- Configures server networking
-- Sets up time synchronization
-
-### Step 4: Complete Installation
-
-Monitor the installation progress:
-
-```bash
-# From the project directory
-cd projects/<your-cluster-name>
-openshift-install wait-for bootstrap-complete --log-level=debug
-openshift-install wait-for install-complete --log-level=debug
-```
-
-## DNS Configuration
-
-### Automatic DNS Setup
-
-The deployment automatically configures DNS using the `add-dns-cluster` role:
-
-- **Remote DNS:** Updates CoreDNS server with cluster records
-- **Local DNS:** Configures local dnsmasq for development access
-
-### Manual DNS Verification
-
-Verify DNS resolution:
-
-```bash
-dig +short api.my-cluster.nfv.com
-dig +short *.apps.my-cluster.nfv.com
-```
-
-### DNS Server Management
-
-If you need to deploy a new DNS server:
-
-```bash
-ansible-playbook -i roles/create-dns-server/tasks/main.yml --tags deploy,setup
-```
-
-## Post-Deployment Operations
-
-### Access Your Cluster
-
-1. **Get cluster credentials:**
+1. **Pull Secret**: Get from [Red Hat Console](https://console.redhat.com/openshift/install/pull-secret)
    ```bash
-   cd projects/<your-cluster-name>
-   export KUBECONFIG=auth/kubeconfig
+   cp secrets/pull-secret.txt.example secrets/pull-secret.txt
+   # Edit with your actual pull secret
    ```
 
-2. **Verify cluster access:**
+2. **SSH Key**:
    ```bash
-   oc get nodes
-   oc get clusteroperators
+   cp secrets/ssh-key.pub.example secrets/ssh-key.pub
+   # Add your public SSH key
    ```
 
-3. **Get console URL:**
-   ```bash
-   oc get routes -n openshift-console
-   ```
+### Security Best Practices
 
-### Apply Custom Resources
+- Never commit actual secrets to version control
+- Use environment-specific secret files when needed
+- Rotate secrets regularly
+- Use OpenStack application credentials where possible
 
-Deploy networking and storage configurations:
+## 🏗️ Architecture
+
+### Network Architecture
+- **SNO Network**: Primary cluster network (192.168.122.0/24)
+- **OpenStack Network**: Secondary network for RHOSO services
+- **VLAN Configuration**:
+  - VLAN 20: Internal API (172.17.0.0/24)
+  - VLAN 21: Storage (172.18.0.0/24)
+  - VLAN 22: Tenant (172.19.0.0/24)
+
+### DNS Architecture
+- **CoreDNS Server**: Centralized DNS for multiple clusters
+- **Local DNS**: dnsmasq configuration for development
+- **Automatic Records**: API and application route records
+
+### Storage Architecture
+- **Local Storage**: Direct-attached storage for cluster nodes
+- **OpenStack Volumes**: Persistent storage for applications
+- **Container Storage**: OpenShift Container Storage when needed
+
+## 🔄 CI/CD Integration
+
+### GitHub Actions
+
+The repository includes GitHub Actions workflows for:
+- Ansible lint validation
+- YAML syntax checking
+- Playbook syntax validation
+
+### Pre-commit Hooks
+
+Install pre-commit hooks for local development:
 
 ```bash
-oc apply -f cr/networking.yaml
-oc apply -f cr/local-storage.yaml
+pip install pre-commit
+pre-commit install
 ```
 
-### Server Management
+### Testing Strategy
 
-**Start/Stop server:**
 ```bash
-# Set server action in group_vars or pass as extra var
-ansible-playbook deploy.yml -e server_action=hard-reboot
+# Unit tests (when available)
+make test-unit
+
+# Integration tests
+make test-integration
+
+# Molecule tests
+cd roles/common && molecule test
 ```
 
-**Get server floating IP:**
-```bash
-ansible-playbook get_server_fip.yml
-```
-
-## Troubleshooting
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-**1. Bootstrap Timeout:**
+**Bootstrap Timeout:**
 ```bash
-# Check server console in OpenStack
+# Check server console
 openstack console log show <server-name>
 
 # SSH to server (if accessible)
@@ -288,7 +314,7 @@ ssh core@<server-ip>
 sudo journalctl -u bootkube.service
 ```
 
-**2. DNS Resolution Issues:**
+**DNS Resolution Issues:**
 ```bash
 # Check local DNS configuration
 cat /etc/NetworkManager/dnsmasq.d/99-*.conf
@@ -297,113 +323,109 @@ cat /etc/NetworkManager/dnsmasq.d/99-*.conf
 sudo systemctl restart NetworkManager
 ```
 
-**3. Network Connectivity:**
+**Network Connectivity:**
 ```bash
 # Test from debug pod
-oc apply -f cr/simple-pod.yaml
+oc apply -f configs/kubernetes/simple-pod.yaml
 oc exec -it net-debug-container -- /bin/bash
 ```
 
 ### Log Locations
+- **Installation logs**: `build/projects/<cluster-name>/.openshift_install.log`
+- **Bootstrap logs**: On cluster node at `/var/log/`
+- **OpenStack SDK logs**: `/tmp/openstack_sdk.log`
 
-- **Installation logs:** `projects/<cluster-name>/.openshift_install.log`
-- **Bootstrap logs:** On cluster node at `/var/log/`
-- **OpenStack SDK logs:** `/tmp/openstack_sdk.log`
-
-### Debug Commands
+### Validation Commands
 
 ```bash
-# List all OpenStack resources for project
+# Validate configuration
+make validate-dev
+
+# Check OpenStack resources
 openstack server list --name <project-name>
 openstack network list --name <project-name>
-openstack volume list --name <project-name>
 
-# Check security groups
+# Verify security groups
 openstack security group list
-openstack security group show <security-group>
-
-# Verify floating IPs
 openstack floating ip list
 ```
 
-## Cleanup
+## 📖 Documentation
 
-### Complete Environment Cleanup
+- [Deployment Guide](docs/deployment-guide.md) - Detailed deployment instructions
+- [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
+- [Architecture Overview](docs/architecture.md) - System architecture details
+- [Examples](docs/examples/) - Step-by-step examples
 
-Remove all resources for a project:
+## 🤝 Contributing
 
-```bash
-ansible-playbook destroy.yml
-```
+### Development Setup
 
-**What this removes:**
-- Compute instances
-- Volumes
-- Networks and subnets
-- Routers and interfaces
-- Ports
-- Security groups
-- Floating IPs
+1. Fork the repository
+2. Create a feature branch
+3. Make changes and test
+4. Run linting: `make lint`
+5. Submit a pull request
 
-### Partial Cleanup
+### Code Standards
 
-**Remove specific resources:**
-```bash
-# Remove server only
-openstack server delete <server-name>
+- All Ansible code must pass `ansible-lint`
+- YAML files must pass `yamllint`
+- Use meaningful commit messages
+- Document any new features
+- Test changes in development environment
 
-# Remove volume
-openstack volume delete <volume-name>
+### Role Development
 
-# Remove network
-openstack network delete <network-name>
-```
-
-### Local Cleanup
+When creating new roles:
 
 ```bash
-# Remove project directory
-rm -rf projects/<project-name>
+# Create role structure
+ansible-galaxy role init roles/my-new-role
 
-# Remove local DNS configuration
-sudo rm /etc/NetworkManager/dnsmasq.d/99-<project-name>.conf
-sudo systemctl restart NetworkManager
+# Ensure proper metadata
+cat > roles/my-new-role/meta/main.yml << EOF
+---
+galaxy_info:
+  author: PSI SNO Team
+  description: Description of the role
+  license: MIT
+  min_ansible_version: "2.14"
+dependencies: []
+EOF
 ```
 
-## Advanced Usage
+## 📋 Migration Guide
 
-### Custom Machine Configs
+If migrating from the old repository structure:
 
-1. Create Butane templates in `butane/` directory
-2. Generate machine configs:
+1. **Run Migration Script**:
    ```bash
-   ansible-playbook gen_machineconfig.yml
-   ```
-3. Apply generated configs:
-   ```bash
-   oc apply -f cr-gen/
+   chmod +x migrate-psi-sno.sh
+   ./migrate-psi-sno.sh
    ```
 
-### Multiple Clusters
+2. **Validate Migration**:
+   ```bash
+   chmod +x validate-migration.sh
+   ./validate-migration.sh
+   ```
 
-Deploy multiple clusters by:
-1. Creating separate install configs
-2. Running deployment with different project names
-3. Each cluster gets isolated networks and resources
+3. **Test New Structure**:
+   ```bash
+   make test
+   make deploy-dev --check
+   ```
 
-### Network Customization
+## 📄 License
 
-Modify `cr/nncp.yaml` for custom:
-- VLAN IDs
-- IP address ranges
-- Interface names
-- DNS servers
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support and Contributing
+## 🆘 Support
 
 For issues and questions:
-- Check the troubleshooting section
-- Review OpenStack and OpenShift logs
+- Check the [troubleshooting guide](docs/troubleshooting.md)
+- Review [GitHub Issues](https://github.com/your-org/psi-sno/issues)
 - Consult Red Hat documentation for RHOSO
 
 When reporting issues, include:
@@ -411,3 +433,13 @@ When reporting issues, include:
 - OpenStack resource states
 - OpenShift installation logs
 - Network configuration details
+
+## 📊 Project Status
+
+- ✅ Repository restructuring complete
+- ✅ Ansible lint compliance
+- ✅ CI/CD pipeline setup
+- ✅ Environment separation
+- ✅ Documentation updates
+- 🔄 Additional testing and validation
+- 📋 Advanced features and integrations

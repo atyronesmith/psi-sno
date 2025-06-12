@@ -1,0 +1,3 @@
+---
+- name: Run common validation tasks
+  ansible.builtin.include_tasks: validate-config.yml
