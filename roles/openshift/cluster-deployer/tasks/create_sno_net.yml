@@ -4,13 +4,13 @@
     msg: "Calculated instance IP: {{ project_instance_ip }}"
 
 # Corresponds to the security_groups() function logic
-- name: Ensure network {{ project_name }} exists
+- name: Ensure network {{ project_name }} exists # noqa name[template]
   openstack.cloud.network:
     state: present
     name: "{{ project_name }}"
   register: network_result
 
-- name: Ensure subnet {{ project_name }} exists on network {{ project_name }}
+- name: Ensure subnet {{ project_name }} exists on network {{ project_name }} # noqa name[template]
   openstack.cloud.subnet:
     state: present
     network_name: "{{ project_name }}"
@@ -31,7 +31,7 @@
   register: router_interface_info
   when: subnet_result.subnet is defined # Ensure parent resources exist
 
-- name: Ensure port {{ project_name }} exists with fixed IP {{ project_instance_ip }}
+- name: Ensure port {{ project_name }} exists with fixed IP {{ project_instance_ip }} # noqa name[template]
   openstack.cloud.port:
     state: present
     name: "{{ project_name }}"

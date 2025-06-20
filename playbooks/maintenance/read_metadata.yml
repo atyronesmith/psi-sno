@@ -6,34 +6,7 @@
   gather_facts: false
 
   tasks:
-    - name: Dynamically include the 'make_iso' tasks from the 'psi-project' role
+    - name: Dynamically include the 'make_iso' tasks from the 'openshift/iso-builder' role
       ansible.builtin.include_role:
-        name: psi-project
+        name: openshift/iso-builder
         tasks_from: read_metadata
-        # This 'tasks_from' parameter tells Ansible to skip 'tasks/main.yml'
-        # and instead execute the tasks from the 'tasks/make_iso.yml' file
-        # within the 'psi-project' role.
-
-# How it Works & Required Role Structure:
-#
-# 1. For this playbook to work, your 'psi-project' role must have a file named
-#    'make_iso.yml' inside its 'tasks' directory.
-#
-#    Example role structure:
-#    roles/
-#    └── psi-project/
-#        ├── tasks/
-#        │   ├── main.yml         (This file is ignored by this playbook)
-#        │   ├── make_iso.yml       (This file is executed)
-#        │   └── another_task_file.yml
-#        └── ... (other role directories)
-#
-# 2. The `tasks_from: make_iso` argument directly specifies which task file to run.
-#    The `.yml` extension is assumed.
-#
-# 3. This approach is often cleaner than using tags for roles that have several
-#    independent actions, as it separates the logic into different files.
-#
-# 4. Unlike the previous tag-based example, you do not need to add `tags: [make_iso]`
-#    to every task inside `tasks/make_iso.yml`. All tasks within that file will
-#    be executed by this playbook.

@@ -1,14 +1,15 @@
+---
 - name: Get a deployed SNO server's floating IP
   hosts: localhost
   gather_facts: false
 
   tasks:
-    - name: Dynamically include the 'make_iso' tasks from the 'psi-project' role
+    - name: Dynamically include the 'make_iso' tasks from the 'openshift/cluster-deployer' role
       ansible.builtin.include_role:
-        name: cluster
+        name: openshift/cluster-deployer
         tasks_from: read_metadata
 
-    - name: Dynamically include the 'read_metadata' tasks from the 'psi-project' role
+    - name: Dynamically include the 'read_metadata' tasks from the 'openshift/cluster-deployer' role
       ansible.builtin.include_role:
-        name: cluster
+        name: openshift/cluster-deployer
         tasks_from: get_server_fip.yml

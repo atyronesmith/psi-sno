@@ -15,7 +15,7 @@
       openstack.cloud.networks_info:
         name: "{{ project_provider_network }}"
       register: provider_net_check
-      
+
     - name: Fail if provider network doesn't exist
       ansible.builtin.fail:
         msg: "Provider network '{{ project_provider_network }}' not found"

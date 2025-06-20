@@ -1,3 +1,4 @@
+---
 - name: "Gather info about the port '{{ project_name }}'"
   openstack.cloud.port_info:
     port: "{{ project_name }}"
@@ -16,13 +17,13 @@
   when: port_info_check.ports | length > 0 # Only if port exists
   register: port_delete_result
 
-- name: "Gather info about the router '{{ project_name }}' to check its interfaces"
+- name: "Gather info about the router '{{ project_name }}' to check its interfaces" # noqa name[template]
   openstack.cloud.routers_info:
     name: "{{ project_name }}"
   register: router_info_check
   ignore_errors: true
 
-- name: "Detach subnet '{{ project_name }}' from router '{{ project_name }}'"
+- name: "Detach subnet '{{ project_name }}' from router '{{ project_name }}'" # noqa name[template]
   openstack.cloud.router:
     name: "{{ project_name }}"
     interfaces:

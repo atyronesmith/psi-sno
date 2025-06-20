@@ -2,9 +2,11 @@
 - name: Remove the sno network and related resources
   hosts: localhost
   gather_facts: false
+  vars_files:
+    - ../inventory/group_vars/all.yml
 
   tasks:
     - name: Run destroy tasks from cluster role
       ansible.builtin.include_role:
-        name: cluster
+        name: openshift/cluster-deployer
         tasks_from: destroy

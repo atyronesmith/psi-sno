@@ -1,0 +1,12 @@
+---
+- name: Download RHCOS ISO using iso-builder role
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../inventory/group_vars/all.yml
+
+  tasks:
+    - name: Dynamically include the 'make_iso' tasks from the 'openshift/cluster-deployer' role
+      ansible.builtin.include_role:
+        name: openshift/iso-builder
+        tasks_from: download_iso

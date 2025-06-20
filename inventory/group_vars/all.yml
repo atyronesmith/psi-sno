@@ -25,11 +25,19 @@ sno_volume_size: 120
 # OpenShift Configuration
 # ============================================================================
 ocp_version: "4.18.10"
-ocp_arch: "x86_64"
+# Specify the target host architecture.
+# Valid options include: "x86_64", "aarch64", "s390x", "ppc64le"
+architecture: "x86_64"
+# Define the local directory where artifacts will be downloaded if needed.
+iso_download_dir: "{{ (playbook_dir ~ '/../build/isos') | realpath }}"
+# Define the expected filename for the ISO.
+iso_filename: "rhcos-{{ ocp_version }}-{{ architecture }}.iso"
+
+# Directory that contains the install-config.yaml files
+config_directory: "{{ (playbook_dir ~ '/../install-configs') | realpath }}"
 
 # Build directories
-iso_dir: "{{ playbook_dir }}/../build/isos"
-project_build_dir: "{{ playbook_dir }}/../build/projects"
+project_build_dir: "{{ (playbook_dir ~ '/../build/projects') | realpath }}"
 
 # ISO configuration
 sno_iso_image_name: "rhcos-live.iso"
@@ -38,8 +46,8 @@ sno_iso_base: "rhcos-live"
 # ============================================================================
 # Machine Config Generation
 # ============================================================================
-butane_templates_dir: "../configs/openshift/machine-configs/butane"
-ignition_output_dir: "../build/generated"
+butane_templates_dir: "{{ (playbook_dir ~ '/../configs/openshift/machine-configs/butane') | realpath }}"
+ignition_output_dir: "{{ (playbook_dir ~ '/../build/generated') | realpath }}"
 butane_executable: "butane"
 
 # ============================================================================
@@ -50,6 +58,7 @@ dns_cidr: "192.168.100.0/24"
 dns_instance_ip: "{{ dns_cidr | ansible.utils.ipaddr('100') | ansible.utils.ipaddr('address') }}"
 dns_fip: "10.0.108.151"
 dns_root: "/etc/coredns/clusters"
+dns_user: "fedora"
 
 # ============================================================================
 # Timeouts and Retry Configuration

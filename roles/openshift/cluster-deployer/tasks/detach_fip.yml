@@ -22,13 +22,12 @@
   # Consider adding 'ignore_errors: true' if you want the playbook to continue
   # even if this specific IP does not exist or cannot be released.
 
-- name: Free (release) floating IP {{ os_network_fip_to_free }} (formerly for OS network interface)
+- name: Free (release) floating IP {{ os_network_fip_to_free }} (formerly for OS network interface) # noqa name[template]
   openstack.cloud.floating_ip:
     state: absent
     server: "{{ project_name }}" # Name of the server to which the FIP was attached
     network: "{{ project_provider_network }}" # External network from which the FIP was allocated
     floating_ip_address: "{{ os_network_fip_to_free }}" # Variable for the OS network FIP to release
-                                                       # This variable MUST be defined.
     wait: true
     timeout: 180
   register: os_fip_release_result
@@ -41,7 +40,3 @@
       - "  {{ 'Released successfully' if sno_fip_release_result.changed else 'No change (already absent or not found)' }}"
       - "Release status for OS FIP {{ os_network_fip_to_free }}: "
       - "  {{ 'Released successfully' if os_fip_release_result.changed else 'No change (already absent or not found)' }}"
-  # Note: 'changed' is true if the FIP was present and then deleted by the task.
-  # If the FIP was already absent, 'changed' will be false.
-  # If 'ignore_errors: true' was used on the tasks, also check 'sno_fip_release_result.failed'
-  # and 'os_fip_release_result.failed' for a more complete status.

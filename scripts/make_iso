@@ -9,7 +9,7 @@ project_dir="proj-$PROJECT_NAME"
 
 set -e
 
-iso_dir=iso
+iso_download_dir=iso
 
 ocp_arch=x86_64
 
@@ -17,16 +17,16 @@ iso_url=$(openshift-install coreos print-stream-json | grep location | grep $ocp
 
 printf "ISO URL: %s\n" "$iso_url"
 
-mkdir -p $iso_dir
+mkdir -p $iso_download_dir
 
-if [ ! -f $iso_dir/"$SNO_ISO_IMAGE" ]; then
-    echo "Downloading RHCOS ISO... to $iso_dir/$SNO_ISO_IMAGE"
-    curl -L "$iso_url" -o $iso_dir/"$SNO_ISO_IMAGE"
+if [ ! -f $iso_download_dir/"$SNO_ISO_IMAGE" ]; then
+    echo "Downloading RHCOS ISO... to $iso_download_dir/$SNO_ISO_IMAGE"
+    curl -L "$iso_url" -o $iso_download_dir/"$SNO_ISO_IMAGE"
 else
     echo "RHCOS ISO already exists, skipping download."
 fi
 
-cp -f $iso_dir/"$SNO_ISO_IMAGE" .
+cp -f $iso_download_dir/"$SNO_ISO_IMAGE" .
 
 if [ -d "$project_dir" ]; then
     echo "Removing existing directory: $project_dir"
