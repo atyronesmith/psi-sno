@@ -1,3 +1,4 @@
+---
 - name: Get server information {{ project_name }}
   openstack.cloud.server_info:
     server: "{{ project_name }}"

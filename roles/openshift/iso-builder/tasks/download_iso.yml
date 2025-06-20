@@ -1,0 +1,108 @@
+# Tasks to download Red Hat CoreOS (RHCOS) ISO and openshift-install binary
+---
+- name: Ensure download directory exists {{ iso_download_dir }}
+  ansible.builtin.file:
+    path: "{{ iso_download_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Check if ISO file already exists
+  ansible.builtin.stat:
+    path: "{{ iso_download_dir }}/{{ iso_filename }}"
+  register: iso_file_check
+
+- name: Exit gracefully if ISO file already exists
+  when: iso_file_check.stat.exists
+  block:
+    - name: Success ISO file already exists
+      ansible.builtin.debug:
+        msg:
+          - "Success"
+          - "The ISO file already exists at: {{ iso_file_check.stat.path }}"
+    - name: End playbook
+      ansible.builtin.meta: end_play
+
+# --- The following tasks will only run if the ISO does not exist ---
+
+- name: Check if 'openshift-install' is in the system PATH
+  ansible.builtin.command: which openshift-install
+  register: openshift_install_path
+  changed_when: false
+  failed_when: false
+
+- name: Display path to 'openshift-install' if found
+  ansible.builtin.debug:
+    msg: "Found 'openshift-install' in system PATH: {{ openshift_install_path.stdout }}. Will use this version."
+  when: openshift_install_path.rc == 0
+
+- name: Inform user that 'openshift-install' will be downloaded
+  ansible.builtin.debug:
+    msg: "'openshift-install' not found in PATH. It will be downloaded to '{{ iso_download_dir }}'."
+  when: openshift_install_path.rc != 0
+
+- name: Download and extract OpenShift Install binary (if not in PATH)
+  ansible.builtin.unarchive:
+    src: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ ocp_version }}/openshift-install-linux.tar.gz"
+    dest: "{{ iso_download_dir }}"
+    remote_src: true
+    extra_opts:
+      - --wildcards
+      - "*/openshift-install"
+  when: openshift_install_path.rc != 0
+
+- name: Ensure downloaded openshift-install is executable (if not in PATH)
+  ansible.builtin.file:
+    path: "{{ iso_download_dir }}/openshift-install"
+    mode: '0755'
+    state: file
+  when: openshift_install_path.rc != 0
+
+- name: Retrieve RHCOS ISO URL (using openshift-install from PATH)
+  ansible.builtin.command:
+    argv:
+      - openshift-install
+      - coreos
+      - print-stream-json
+  register: stream_json_path
+  changed_when: false
+  check_mode: false
+  when: openshift_install_path.rc == 0
+
+- name: Retrieve RHCOS ISO URL (using downloaded openshift-install)
+  ansible.builtin.command:
+    argv:
+      - ./openshift-install
+      - coreos
+      - print-stream-json
+    chdir: "{{ iso_download_dir }}"
+  register: stream_json_dl
+  changed_when: false
+  check_mode: false
+  when: openshift_install_path.rc != 0
+
+- name: Combine JSON output
+  ansible.builtin.set_fact:
+    stream_json: "{{ (stream_json_path.stdout | default('{}') | from_json) | combine(stream_json_dl.stdout | default('{}') | from_json) }}"
+
+- name: Find ISO URL from JSON stream
+  ansible.builtin.set_fact:
+    iso_url: "{{ stream_json.architectures[architecture].artifacts.metal.formats.iso.disk.location }}"
+
+- name: Display the discovered ISO URL
+  ansible.builtin.debug:
+    msg: "Found RHCOS ISO URL: {{ iso_url }}"
+
+- name: Download the RHCOS ISO
+  ansible.builtin.get_url:
+    url: "{{ iso_url }}"
+    dest: "{{ iso_download_dir }}/{{ iso_filename }}"
+    mode: '0644'
+  async: 1000
+  poll: 10
+
+- name: Final instructions
+  ansible.builtin.debug:
+    msg:
+      - "SUCCESS: RHCOS ISO download complete."
+      - "The ISO is located at: {{ iso_download_dir }}/{{ iso_filename }}"
+      - "The 'openshift-install' binary used is located at: {{ (openshift_install_path.rc == 0) | ternary(openshift_install_path.stdout, iso_download_dir + '/openshift-install') }}"

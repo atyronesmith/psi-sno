@@ -1,4 +1,5 @@
-- name: Delete server {{ project_name }} 
+---
+- name: Delete server {{ project_name }}
   openstack.cloud.server:
     name: "{{ project_name }}"
     state: absent

@@ -5,7 +5,6 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
 echo "========================================"
@@ -244,22 +243,22 @@ rules:
   line-length:
     max: 120
     level: warning
-  
+
   indentation:
     spaces: 2
     indent-sequences: true
     check-multi-line-strings: false
-  
+
   truthy:
     allowed-values: ['true', 'false', 'yes', 'no']
     check-keys: false
-  
+
   comments:
     min-spaces-from-content: 1
-  
+
   document-start:
     present: true
-  
+
   empty-lines:
     max: 2
     max-start: 1
@@ -361,7 +360,7 @@ on:
 jobs:
   ansible-lint:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -458,7 +457,7 @@ ocp_version: "4.18.10"
 ocp_arch: "x86_64"
 
 # Build directories
-iso_dir: "{{ playbook_dir }}/../build/isos"
+iso_download_dir: "{{ playbook_dir }}/../build/isos"
 project_build_dir: "{{ playbook_dir }}/../build/projects"
 
 # ISO configuration
@@ -491,7 +490,7 @@ EOF
 # Create environment-specific inventories
 for env in dev staging prod; do
     echo "localhost ansible_connection=local" > "inventory/environments/$env/inventory.yml"
-    
+
     # Create environment-specific group vars
     cat > "inventory/environments/$env/group_vars/all.yml" << EOF
 ---
@@ -561,10 +560,10 @@ update_file_for_lint() {
     local file="$1"
     if [ -f "$file" ]; then
         echo "  Updating $file..."
-        
+
         # Create backup
         cp "$file" "$file.bak"
-        
+
         # Update module names to use FQCN
         sed -i 's/^  debug:/  ansible.builtin.debug:/g' "$file"
         sed -i 's/^  set_fact:/  ansible.builtin.set_fact:/g' "$file"
@@ -591,10 +590,10 @@ update_file_for_lint() {
         sed -i 's/^  package:/  ansible.builtin.package:/g' "$file"
         sed -i 's/^  get_url:/  ansible.builtin.get_url:/g' "$file"
         sed -i 's/^  unarchive:/  ansible.builtin.unarchive:/g' "$file"
-        
+
         # Fix name templates that might cause lint issues
         sed -i 's/ # noqa name\[template\]//g' "$file"
-        
+
         # Add quiet: true to assert tasks if not present
         if grep -q "ansible.builtin.assert:" "$file" && ! grep -A5 "ansible.builtin.assert:" "$file" | grep -q "quiet:"; then
             sed -i '/ansible\.builtin\.assert:/,/^[[:space:]]*[^[:space:]]/ {
@@ -639,7 +638,7 @@ cat > roles/common/tasks/validate-config.yml << 'EOF'
       openstack.cloud.networks_info:
         name: "{{ project_provider_network }}"
       register: provider_net_check
-      
+
     - name: Fail if provider network doesn't exist
       ansible.builtin.fail:
         msg: "Provider network '{{ project_provider_network }}' not found"
@@ -664,7 +663,7 @@ cat > roles/infrastructure/security-groups/tasks/main.yml << 'EOF'
 - name: Create SNO security groups
   ansible.builtin.include_tasks: create_sno_security_groups.yml
 
-- name: Create OpenStack security groups  
+- name: Create OpenStack security groups
   ansible.builtin.include_tasks: create_openstack_security_groups.yml
 EOF
 

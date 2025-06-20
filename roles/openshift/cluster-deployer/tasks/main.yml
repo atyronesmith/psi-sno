@@ -6,5 +6,5 @@
       You must use 'tasks_from' and specify either 'deploy' or 'destroy' when including this role.
       Example:
         - include_role:
-            name: cluster
-            tasks_from: deploy
+            name: openshift/cluster-deployer
+            tasks_from: deploy_cluster

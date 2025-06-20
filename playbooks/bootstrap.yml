@@ -4,7 +4,7 @@
   gather_facts: false     # No need to gather facts from localhost for this task
   connection: local       # Ensures modules run locally
   vars_files:
-    - common_vars.yml        # Load variables from an external file (if needed)
+    - ../inventory/group_vars/all.yml  # Load variables from the group_vars file
   vars:
     wait_timeout_minutes: 10
     # Define the directory where your OpenShift installation configuration files

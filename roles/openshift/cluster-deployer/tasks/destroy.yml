@@ -1,7 +1,7 @@
 ---
-- name: Dynamically include the 'read_metadata' tasks from the 'psi-project' role
+- name: Dynamically include the 'read_metadata' tasks from the 'openshift/iso-builder' role
   ansible.builtin.include_role:
-    name: psi-project
+    name: openshift/iso-builder
     tasks_from: read_metadata
 
 - name: Delete server

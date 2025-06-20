@@ -1,7 +1,7 @@
 ---
-- name: Include role psi-project
+- name: Include role openshift/iso-builder
   ansible.builtin.include_role:
-    name: psi-project
+    name: openshift/iso-builder
     tasks_from: read_metadata
 
 - name: Include tasks for configuring remote DNS

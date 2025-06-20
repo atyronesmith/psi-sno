@@ -1,18 +1,25 @@
-.PHONY: help lint lint-fix syntax-check test clean install-deps
+.PHONY: help lint lint-fix syntax-check test clean install-deps download-iso create-iso-dev bootstrap-dev validate-dev info-dev start-dev stop-dev deploy-dev destroy-dev
 
 help:
 	@echo "Available targets:"
-	@echo "  help         - Show this help message"
-	@echo "  lint         - Run ansible-lint and yamllint"
-	@echo "  lint-fix     - Run ansible-lint with auto-fix where possible"
-	@echo "  syntax-check - Run ansible syntax check on all playbooks"
-	@echo "  test         - Run all tests (lint + syntax)"
-	@echo "  install-deps - Install required dependencies"
-	@echo "  clean        - Clean build artifacts"
+	@echo "  help           - Show this help message"
+	@echo "  lint           - Run ansible-lint and yamllint"
+	@echo "  lint-fix       - Run ansible-lint with auto-fix where possible"
+	@echo "  syntax-check   - Run ansible syntax check on all playbooks"
+	@echo "  test           - Run all tests (lint + syntax)"
+	@echo "  install-deps   - Install required dependencies"
+	@echo "  clean          - Clean build artifacts"
+	@echo "  download-iso   - Download the RHCOS ISO using the iso-builder role"
 	@echo ""
 	@echo "Environment targets:"
-	@echo "  deploy-dev   - Deploy to development environment"
-	@echo "  destroy-dev  - Destroy development environment"
+	@echo "  deploy-dev     - Deploy to development environment"
+	@echo "  destroy-dev    - Destroy development environment"
+	@echo "  create-iso-dev - Create ISO for development environment"
+	@echo "  bootstrap-dev  - Wait for OpenShift bootstrap completion in dev"
+	@echo "  validate-dev   - Run a dry-run deploy with check and diff"
+	@echo "  info-dev       - Get cluster info for development environment"
+	@echo "  start-dev      - Start the development cluster"
+	@echo "  stop-dev       - Stop the development cluster"
 
 install-deps:
 	pip install --upgrade pip
@@ -78,3 +85,6 @@ start-dev:
 
 stop-dev:
 	ansible-playbook -i inventory/environments/dev playbooks/maintenance/stop-cluster.yml
+
+download-iso:
+	ansible-playbook playbooks/download-iso.yml

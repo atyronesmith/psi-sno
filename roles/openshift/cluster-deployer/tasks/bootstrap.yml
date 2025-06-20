@@ -6,18 +6,18 @@
 
 - name: Check status of project directory
   ansible.builtin.stat:
-    path: "{{ project_dir }}"
+    path: "{{ metadata_location }}"
   register: dir_status
 
 - name: Fail if installation directory does not exist
   ansible.builtin.fail:
-    msg: "Required installation directory '{{ project_dir }}' does not exist or is not a directory."
+    msg: "Required installation directory '{{ metadata_location }}' does not exist or is not a directory."
   when: not dir_status.stat.exists or not dir_status.stat.isdir
 
 - name: Wait for the OpenShift bootstrap to complete
   ansible.builtin.command: "openshift-install wait-for bootstrap-complete --log-level=debug"
   args:
-    chdir: "{{ project_dir }}"
+    chdir: "{{ metadata_location }}"
   register: bootstrap_status
   timeout: "{{ wait_timeout_minutes * 60 }}"
   changed_when: bootstrap_status.rc == 0

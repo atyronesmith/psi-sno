@@ -33,9 +33,13 @@
   delegate_to: localhost # Ensures the when condition for the block is evaluated on localhost
   run_once: true
   block:
-    - name: Find directories in 'projects' on localhost
+    - name: "No project_name defined, looking for directories in 'projects' on localhost"
+      ansible.builtin.debug:
+        msg: "No project_name defined. Searching for directories in 'projects' to prompt user."
+
+    - name: Find directories in '{{ project_build_dir }}' on localhost # noqa name[template]
       ansible.builtin.find:
-        paths: "projects"  # Assumes 'somedir' is relative to where ansible is run, or an absolute path
+        paths: "{{ project_build_dir }}"  # Assumes 'somedir' is relative to where ansible is run, or an absolute path
         file_type: directory
         recurse: false # Only look at the top-level directories within somedir
       register: found_project_dirs
@@ -91,9 +95,9 @@
         project_name: "{{ file_basenames[user_selected_index | int] }}"
       when: user_selected_index is defined
 
-- name: Set metadata_location using project_name if metadata_location is not defined
+- name: "Set metadata_location using project_name if metadata_location is not defined" # noqa name[template]
   ansible.builtin.set_fact:
-    metadata_location: "{{ playbook_dir }}/projects/{{ project_name }}"
+    metadata_location: "{{ project_build_dir }}/{{ project_name }}"
   when:
     - metadata_location is not defined
     - project_name is defined # This 'project_name' must be an initial input or from a prior play/set_fact
@@ -218,3 +222,4 @@
       - "Project Domain: {{ project_domain }}"
       - "Project Cluster: {{ project_cluster }}"
       - "Project CIDR: {{ project_cidr }}"
+      - "Metadata Location: {{ metadata_location }}"

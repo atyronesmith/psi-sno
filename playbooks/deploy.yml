@@ -4,9 +4,11 @@
   # like building an ISO file. Change if your role needs to run elsewhere.
   hosts: localhost
   gather_facts: false
+  vars_files:
+    - ../inventory/group_vars/all.yml
 
   tasks:
-    - name: Dynamically include the 'make_iso' tasks from the 'psi-project' role
+    - name: Dynamically include the 'make_iso' tasks from the 'openshift/cluster-deployer' role
       ansible.builtin.include_role:
-        name: cluster
-        tasks_from: deploy
+        name: openshift/cluster-deployer
+        tasks_from: deploy_cluster

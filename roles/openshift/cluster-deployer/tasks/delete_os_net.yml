@@ -6,14 +6,14 @@
 # It is recommended to run this in a test environment first and
 # double-check the target resources before executing in production.
 
-- name: "Gather info about the port '{{ project_name }}-os'"
+- name: "Gather info about the port '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.port_info:
     port: "{{ project_name }}-os"
     # network: "{{ project_name }}-os" # Optional: if port name isn't unique
   register: port_info_check
   ignore_errors: true # Continue if port is already gone
 
-- name: "Delete port '{{ project_name }}-os'"
+- name: "Delete port '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.port:
     state: absent
     name: "{{ project_name }}-os"
@@ -24,13 +24,13 @@
   when: port_info_check.ports | default([]) | length > 0 # Only if port exists
   register: port_delete_result
 
-- name: "Gather info about the router '{{ project_name }}-os'"
+- name: "Gather info about the router '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.routers_info:
     name: "{{ project_name }}-os"
   register: router_info_check
   ignore_errors: true
 
-- name: "Detach subnet '{{ project_name }}-os' from router '{{ project_name }}-os'"
+- name: "Detach subnet '{{ project_name }}-os' from router '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.router:
     name: "{{ project_name }}-os"
     interfaces:
@@ -40,21 +40,21 @@
   when: router_info_check.routers | length > 0 # Only if router exists
   register: router_interface_delete_result
 
-- name: "Delete router '{{ project_name }}-os'"
+- name: "Delete router '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.router:
     state: absent
     name: "{{ project_name }}-os"
   when: router_info_check.routers | default([]) | length > 0 # Only if router exists
   register: router_delete_result
 
-- name: "Gather info about the subnet '{{ project_name }}-os'"
+- name: "Gather info about the subnet '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.subnets_info:
     name: "{{ project_name }}-os"
     # network_name: "{{ project_name }}-os" # Optional
   register: subnet_info_check
   ignore_errors: true
 
-- name: "Delete subnet '{{ project_name }}-os'"
+- name: "Delete subnet '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.subnet:
     state: absent
     name: "{{ project_name }}-os"
@@ -63,13 +63,13 @@
   when: subnet_info_check.subnets | default([]) | length > 0 # Only if subnet exists
   register: subnet_delete_result
 
-- name: "Gather info about the network '{{ project_name }}-os'"
+- name: "Gather info about the network '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.networks_info:
     name: "{{ project_name }}-os"
   register: network_info_check
   ignore_errors: true
 
-- name: "Delete network '{{ project_name }}-os'"
+- name: "Delete network '{{ project_name }}-os'" # noqa name[template]
   openstack.cloud.network:
     state: absent
     name: "{{ project_name }}-os"

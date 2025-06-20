@@ -1,11 +1,7 @@
 ---
-- name: Initialize variables
-  ansible.builtin.set_fact:
-    config_directory: "{{ playbook_dir }}/install-configs"
-
 - name: Ensure sno_iso_base is defined
   ansible.builtin.fail:
-    msg: "The 'sno_iso_base' variable is not defined. Please define it in 'common_vars.yml'."
+    msg: "The 'sno_iso_base' variable is not defined."
   when: sno_iso_base is not defined or sno_iso_base == ""
 
 - name: Prompt for install_config_name if not defined, by listing files in 'install-configs/'
@@ -85,7 +81,7 @@
   register: temp_install_config_dir_info # This var holds path to the temp directory
   delegate_to: localhost
 
-- name: Copy source install config ({{ install_config }}) to temporary directory as 'install-config.yaml'
+- name: Copy source install config ({{ install_config }}) to temporary directory as 'install-config.yaml' # noqa name[template]
   ansible.builtin.copy:
     src: "{{ install_config }}" # Source is the user-specified or default install_config
     dest: "{{ temp_install_config_dir_info.path }}/install-config.yaml" # Must be 'install-config.yaml' for openshift-install
@@ -109,19 +105,34 @@
     metadata_location: "{{ temp_install_config_dir_info.path }}"
   when: temp_install_config_dir_info.path is defined
 
-- name: Copy temporary folder to a local project directory
+- name: Set the new metadata_location variable
+  ansible.builtin.set_fact:
+    metadata_location: "{{ project_build_dir }}/{{ project_name }}"
+  when: project_name is defined
+
+- name: Copy temporary folder to a local project directory {{ temp_install_config_dir_info.path }} -> {{ metadata_location }} # noqa name[template]
   ansible.builtin.copy:
     src: "{{ temp_install_config_dir_info.path }}/"
-    dest: "{{ playbook_dir }}/projects/{{ project_name }}"
+    dest: "{{ metadata_location }}"
     remote_src: true
     mode: '0755'
   when: temp_install_config_dir_info.path is defined
   delegate_to: localhost
 
-- name: Copy ISO from iso_dir to project directory
+- name: Check if ISO exists in iso_download_dir
+  ansible.builtin.stat:
+    path: "{{ iso_download_dir }}/{{ sno_iso_image_name }}"
+  register: iso_file_stat
+  delegate_to: localhost
+
+- name: Download ISO if it does not exist
+  ansible.builtin.include_tasks: download_iso.yml
+  when: not iso_file_stat.stat.exists
+
+- name: Copy ISO from iso_download_dir to project directory
   ansible.builtin.copy:
-    src: "{{ iso_dir }}/{{ sno_iso_image_name }}"
-    dest: "{{ project_dir }}/{{ project_iso_image }}"
+    src: "{{ iso_download_dir }}/{{ sno_iso_image_name }}"
+    dest: "{{ metadata_location }}/{{ project_iso_image }}"
     force: true
     mode: '0644' # Explicitly set file permissions
   when: temp_install_config_dir_info.path is defined
@@ -131,9 +142,9 @@
   ansible.builtin.shell:
     cmd: >
       podman run --privileged --pull newer --rm
-      -v /dev:/dev -v /run/udev:/run/udev -v {{ playbook_dir }}:/data
+      -v /dev:/dev -v /run/udev:/run/udev -v {{ project_build_dir }}/{{ project_name }}:/data
       -w /data quay.io/coreos/coreos-installer:release
-      iso ignition embed -fi {{ project_dir }}/bootstrap-in-place-for-live-iso.ign {{ project_dir }}/{{ project_iso_image }}
+      iso ignition embed -fi /data/bootstrap-in-place-for-live-iso.ign /data/{{ project_iso_image }}
   register: embed_result
   become: true
   changed_when: embed_result.rc != 0
@@ -143,7 +154,7 @@
 - name: Copy install-config.yaml to project directory
   ansible.builtin.copy:
     src: "{{ install_config }}"
-    dest: "{{ project_dir }}/install-config.yaml"
+    dest: "{{ metadata_location }}/install-config.yaml"
     mode: '0644'
   delegate_to: localhost
 
@@ -156,24 +167,11 @@
   when: project_name is defined and metadata_json_content.content is defined and (metadata_json_content.content | b64decode | from_json).infraID is defined
   delegate_to: localhost
 
-- name: Upload an image from a local file named {{ project_dir }}/{{ project_iso_image }}
-  openstack.cloud.image:
-    name: "{{ project_iso_image }}"
-    container_format: bare
-    disk_format: iso
-    state: present
-    filename: "{{ project_dir }}/{{ project_iso_image }}"
-    timeout: 300
-    sdk_log_path: "{{ playbook_dir }}/openstack_sdk.log"
-    sdk_log_level: DEBUG
-  register: image_upload_result
-
-- name: Output formatted OpenStack command to upload ISO
+- name: Output formatted OpenStack command to upload ISOa
   ansible.builtin.debug:
     msg: "{{ image_command | split('\n') }}"
   vars:
     image_command: |
-      Image upload failed.  Please use the following command to upload the ISO image manually:
       ----------------------------------------------------------------------
       OpenStack ISO Upload Command
       ----------------------------------------------------------------------
@@ -182,5 +180,27 @@
       Notes:
       - Ensure you are logged into your OpenStack environment (source your RC file).
       - The '--file' path should be accessible from where you run the command.
+
+      Trying to upload the ISO image automatically...
       ----------------------------------------------------------------------
+
+- name: Upload an image from a local file named {{ metadata_location }}/{{ project_iso_image }} # noqa name[template]
+  openstack.cloud.image:
+    name: "{{ project_iso_image }}"
+    container_format: bare
+    disk_format: iso
+    state: present
+    visibility: shared
+    filename: "{{ metadata_location }}/{{ project_iso_image }}"
+    timeout: 300
+    sdk_log_path: "{{ metadata_location }}/openstack_sdk.log"
+    sdk_log_level: DEBUG
+  register: image_upload_result
+
+- name: Output formatted OpenStack command to upload ISOa
+  ansible.builtin.debug:
+    msg: "{{ image_command | split('\n') }}"
+  vars:
+    image_command: |
+      Image upload failed.  Please upload the ISO image manually:
   when: image_upload_result is failed or (image_upload_result is defined and image_upload_result.failed | default(false))

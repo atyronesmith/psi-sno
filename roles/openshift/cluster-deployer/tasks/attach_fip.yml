@@ -18,7 +18,7 @@
     nat_destination: "{{ project_name }}" # NAT destination for the floating IP
     fixed_address: "{{ project_instance_ip }}"
     wait: false
-    sdk_log_path: "{{ playbook_dir }}/openstack_sdk.log"
+    sdk_log_path: "{{ metadata_location }}/openstack_sdk.log"
     sdk_log_level: DEBUG
     timeout: 120
   register: floating_ip_result
@@ -32,7 +32,7 @@
     nat_destination: "{{ project_name }}-os"
     fixed_address: "{{ project_instance_ip_os }}"
     wait: false
-    sdk_log_path: "{{ playbook_dir }}/openstack_sdk.log"
+    sdk_log_path: "{{ metadata_location }}/openstack_sdk.log"
     sdk_log_level: DEBUG
     timeout: 180
   register: floating_ip_result_os
