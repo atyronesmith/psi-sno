@@ -256,7 +256,7 @@
 
 - name: Display .bu to .ign conversion results
   ansible.builtin.debug:
-    msg: "✅ Successfully converted {{ item.item }} to {{ item.item | regex_replace('\\.bu$', '.ign') }}"
+    msg: "✅ Successfully converted {{ item.bu_file }} to {{ item.bu_file | regex_replace('\\.bu$', '.ign') }}"
   loop: "{{ butane_convert_result.results | default([]) }}"
   when:
     - temp_install_config_dir_info.path is defined
