@@ -1,0 +1,64 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install ansible-lint ansible-core yamllint
+        ansible-galaxy collection install -r requirements.yml
+
+    - name: Run ansible-lint
+      run: ansible-lint
+
+    - name: Run yamllint
+      run: yamllint .
+
+    - name: Syntax check playbooks
+      run: make syntax-check
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run security scan
+      uses: securecodewarrior/github-action-add-sarif@v1
+      with:
+        sarif-file: 'security-results.sarif'
+
+  molecule:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        role: [openshift/iso-builder, openshift/cluster-deployer, infrastructure/openstack-networks]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install molecule
+      run: |
+        pip install molecule[docker] ansible-core
+
+    - name: Run molecule tests
+      run: |
+        cd roles/${{ matrix.role }}
+        molecule test

@@ -1,7 +1,7 @@
 import clusters/*.cluster
 
 .:53 {
-    bind    {{ ansible_default_ipv4.interface }}
+    bind    {{ ansible_default_ipv4.interface | default('enp3s0') }}
     forward . 127.0.0.53 #fwd to systemd-resolved
     log
     errors

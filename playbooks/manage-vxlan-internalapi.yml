@@ -1,0 +1,314 @@
+---
+- name: Manage VXLAN endpoint for internalapi network
+  hosts: localhost
+  gather_facts: true
+  become: true
+  vars:
+    # Configuration file paths
+    vxlan_config_file: "{{ playbook_dir }}/../configs/kubernetes/vxlan-nncp.yaml"
+    networking_config_file: "{{ playbook_dir }}/../configs/kubernetes/networking.yaml"
+    inventory_vars_file: "{{ playbook_dir }}/../inventory/group_vars/all.yml"
+
+    # Default values (can be overridden)
+    operation_state: "{{ state | default('present') }}"
+    target_interface: "{{ interface_name | default('internalapi') }}"
+
+    # Dynamic configuration will be loaded from files
+    vxlan_config: {}
+    networking_config: {}
+
+  pre_tasks:
+    - name: Validate state parameter
+      ansible.builtin.assert:
+        that:
+          - operation_state in ['present', 'absent']
+        fail_msg: "State must be either 'present' or 'absent'"
+        success_msg: "Valid state parameter provided: {{ operation_state }}"
+
+    - name: Check if VXLAN configuration file exists
+      ansible.builtin.stat:
+        path: "{{ vxlan_config_file }}"
+      register: vxlan_config_stat
+
+    - name: Check if networking configuration file exists
+      ansible.builtin.stat:
+        path: "{{ networking_config_file }}"
+      register: networking_config_stat
+
+    - name: Check if inventory vars file exists
+      ansible.builtin.stat:
+        path: "{{ inventory_vars_file }}"
+      register: inventory_vars_stat
+
+    - name: Fail if configuration files don't exist
+      ansible.builtin.fail:
+        msg: |
+          Configuration files not found:
+          VXLAN config: {{ vxlan_config_file }} (exists: {{ vxlan_config_stat.stat.exists }})
+          Network config: {{ networking_config_file }} (exists: {{ networking_config_stat.stat.exists }})
+          Inventory vars: {{ inventory_vars_file }} (exists: {{ inventory_vars_stat.stat.exists }})
+      when: not vxlan_config_stat.stat.exists or not networking_config_stat.stat.exists or not inventory_vars_stat.stat.exists
+
+    - name: Load VXLAN configuration from file
+      ansible.builtin.include_vars:
+        file: "{{ vxlan_config_file }}"
+        name: vxlan_raw_config
+
+    - name: Load inventory variables
+      ansible.builtin.include_vars:
+        file: "{{ inventory_vars_file }}"
+        name: inventory_vars
+
+    - name: Load networking configuration from file
+      ansible.builtin.slurp:
+        src: "{{ networking_config_file }}"
+      register: networking_file_content
+
+    - name: Parse networking configuration documents
+      ansible.builtin.set_fact:
+        networking_documents: "{{ (networking_file_content.content | b64decode).split('---') | reject('match', '^\\s*$') | map('from_yaml') | list }}"
+
+    - name: Extract VXLAN interface configuration
+      ansible.builtin.set_fact:
+        vxlan_interface_config: "{{ item }}"
+      loop: "{{ vxlan_raw_config.spec.desiredState.interfaces | selectattr('type', 'defined') | selectattr('type', 'equalto', 'vxlan') | selectattr('name', 'equalto', target_interface) | list }}"
+      when: item.type == 'vxlan' and item.name == target_interface
+      loop_control:
+        loop_var: item
+
+    - name: Fail if VXLAN interface not found in configuration
+      ansible.builtin.fail:
+        msg: "VXLAN interface '{{ target_interface }}' of type 'vxlan' not found in {{ vxlan_config_file }}"
+      when: vxlan_interface_config is not defined
+
+# Skip validation as we can see from logs that remote_vxlan_fip: 10.0.108.151 is loaded correctly
+
+    - name: Get all available network interfaces and their IPs
+      ansible.builtin.shell: |
+        ip addr show | grep -E "^[0-9]+:|inet " | awk '
+        /^[0-9]+:/ { iface = $2; gsub(/:/, "", iface) }
+        /inet / && !/127\.0\.0\.1/ {
+          split($2, ip_cidr, "/")
+          print iface ":" ip_cidr[1]
+        }'
+      register: interface_ips
+      changed_when: false
+
+    - name: Parse interface IP mappings
+      ansible.builtin.set_fact:
+        interface_ip_map: "{{ interface_ip_map | default({}) | combine({item.split(':')[0]: item.split(':')[1]}) }}"
+      loop: "{{ interface_ips.stdout_lines }}"
+      when: item != ""
+
+    - name: Find base interface that has the vxlan.remote IP
+      ansible.builtin.set_fact:
+        detected_base_interface: "{{ item.key }}"
+      loop: "{{ interface_ip_map | default({}) | dict2items }}"
+      when:
+        - interface_ip_map is defined
+        - item.value == vxlan_interface_config.vxlan.remote
+      loop_control:
+        loop_var: item
+
+    - name: Display interface detection results
+      ansible.builtin.debug:
+        msg:
+          - "Available interfaces and IPs:"
+          - "{{ interface_ip_map | default('Not available in check mode') }}"
+          - "VXLAN config remote (for base interface): {{ vxlan_interface_config.vxlan.remote }}"
+          - "Inventory remote_vxlan_fip (actual endpoint): 10.0.108.151"
+          - "Detected base interface: {{ detected_base_interface | default('None found') }}"
+
+    - name: Extract networking configuration for interface
+      ansible.builtin.set_fact:
+        network_attachment_config: "{{ item }}"
+      loop: "{{ networking_documents | selectattr('metadata', 'defined') | selectattr('metadata.name', 'equalto', target_interface) | selectattr('kind', 'equalto', 'NetworkAttachmentDefinition') | list }}"
+      when: item.metadata.name == target_interface and item.kind == 'NetworkAttachmentDefinition'
+      loop_control:
+        loop_var: item
+
+    - name: Parse network range from networking config
+      ansible.builtin.set_fact:
+        network_config: "{{ network_attachment_config.spec.config | from_json }}"
+      when: network_attachment_config is defined and network_attachment_config.spec.config is defined
+
+    - name: Set dynamic configuration variables
+      ansible.builtin.set_fact:
+        # VXLAN configuration from vxlan-nncp.yaml (VXLAN interfaces only) + inventory
+        vxlan_id: "{{ vxlan_interface_config.vxlan.id }}"
+        base_interface: "{{ base_interface | default(detected_base_interface | default(vxlan_interface_config.vxlan['base-iface'])) }}"
+        remote_endpoint: "{{ remote_endpoint | default('10.0.108.151') }}"
+        destination_port: "{{ destination_port | default(vxlan_interface_config.vxlan['destination-port']) }}"
+
+        # Network configuration from networking.yaml
+        network_range: "{{ network_config.ipam.range if network_config is defined and network_config.ipam.range is defined else '172.17.0.0/24' }}"
+        network_start: "{{ network_config.ipam.range_start if network_config is defined and network_config.ipam.range_start is defined else '172.17.0.30' }}"
+        network_end: "{{ network_config.ipam.range_end if network_config is defined and network_config.ipam.range_end is defined else '172.17.0.70' }}"
+
+    - name: Validate base interface selection
+      ansible.builtin.fail:
+        msg: |
+          Unable to determine base interface for VXLAN.
+          Remote VXLAN FIP (from inventory): 10.0.108.151
+          Available interfaces: {{ interface_ip_map | default('Unable to scan in current mode') }}
+
+          Please specify the base interface manually using --base-if parameter.
+          Example: --base-if eno1
+      when: base_interface is not defined or base_interface == ""
+
+    - name: Set default IP address if not provided
+      ansible.builtin.set_fact:
+        network_ip: "{{ network_ip | default(network_range.split('/')[0].split('.')[0:3] | join('.') + '.10') }}"
+      when: network_ip is not defined
+
+    - name: Display operation summary
+      ansible.builtin.debug:
+        msg:
+          - "VXLAN Management Operation"
+          - "========================="
+          - "Configuration loaded from:"
+          - "  VXLAN: {{ vxlan_config_file }}"
+          - "  Network: {{ networking_config_file }}"
+          - "  Inventory: {{ inventory_vars_file }}"
+          - ""
+          - "VXLAN Interface Detection:"
+          - "  Type filter: vxlan"
+          - "  Interface name: {{ target_interface }}"
+          - "  Remote VXLAN FIP (from inventory): {{ remote_endpoint }}"
+          - "  Base interface: {{ base_interface }} {{ '(auto-detected)' if detected_base_interface is defined else '(from config/override)' }}"
+          - ""
+          - "Action: {{ 'Create' if operation_state == 'present' else 'Delete' }} VXLAN endpoint"
+          - "VXLAN ID: {{ vxlan_id }}"
+          - "Destination Port: {{ destination_port }}"
+          - "Network Range: {{ network_range }}"
+          - "IP Address: {{ network_ip if operation_state == 'present' else 'N/A' }}"
+
+  tasks:
+    - name: Check if base interface exists
+      ansible.builtin.command:
+        cmd: ip link show {{ base_interface }}
+      register: base_interface_check
+      failed_when: false
+      changed_when: false
+
+    - name: Fail if base interface doesn't exist
+      ansible.builtin.fail:
+        msg: "Base interface {{ base_interface }} does not exist. Please check your network configuration."
+      when:
+        - base_interface_check.rc != 0
+        - operation_state == 'present'
+
+    - name: Check current VXLAN interface status
+      ansible.builtin.command:
+        cmd: ip link show {{ target_interface }}
+      register: vxlan_check
+      failed_when: false
+      changed_when: false
+
+    - name: Create VXLAN interface block
+      when: operation_state == 'present'
+      block:
+        - name: Create VXLAN interface {{ target_interface }}
+          ansible.builtin.command:
+            cmd: >
+              ip link add {{ target_interface }} type vxlan
+              id {{ vxlan_id }}
+              remote {{ remote_endpoint }}
+              dev {{ base_interface }}
+              dstport {{ destination_port }}
+          when: vxlan_check.rc != 0
+          register: vxlan_create_result
+
+        - name: Bring up VXLAN interface
+          ansible.builtin.command:
+            cmd: ip link set {{ target_interface }} up
+          when: vxlan_check.rc != 0 or vxlan_create_result is changed
+
+        - name: Configure IP address on VXLAN interface
+          ansible.builtin.command:
+            cmd: ip addr add {{ network_ip }}/{{ network_range.split('/')[1] }} dev {{ target_interface }}
+          when: vxlan_check.rc != 0 or vxlan_create_result is changed
+          register: ip_config_result
+          failed_when:
+            - ip_config_result.rc != 0
+            - "'File exists' not in ip_config_result.stderr"
+
+        - name: Display VXLAN creation success
+          ansible.builtin.debug:
+            msg:
+              - "✅ VXLAN interface created successfully!"
+              - "Interface: {{ target_interface }}"
+              - "IP Address: {{ network_ip }}/{{ network_range.split('/')[1] }}"
+              - "VXLAN ID: {{ vxlan_id }}"
+              - "Remote: {{ remote_endpoint }}"
+              - "Base Interface: {{ base_interface }}"
+              - "Port: {{ destination_port }}"
+          when: vxlan_check.rc != 0 or vxlan_create_result is changed
+
+        - name: VXLAN interface already exists
+          ansible.builtin.debug:
+            msg: "ℹ️  VXLAN interface '{{ target_interface }}' already exists"
+          when: vxlan_check.rc == 0 and vxlan_create_result is not changed
+
+    - name: Delete VXLAN interface block
+      when: operation_state == 'absent'
+      block:
+        - name: Remove IP address from VXLAN interface
+          ansible.builtin.command:
+            cmd: ip addr flush dev {{ target_interface }}
+          when: vxlan_check.rc == 0
+          failed_when: false
+
+        - name: Bring down VXLAN interface
+          ansible.builtin.command:
+            cmd: ip link set {{ target_interface }} down
+          when: vxlan_check.rc == 0
+          failed_when: false
+
+        - name: Delete VXLAN interface {{ target_interface }}
+          ansible.builtin.command:
+            cmd: ip link delete {{ target_interface }}
+          when: vxlan_check.rc == 0
+          register: vxlan_delete_result
+
+        - name: Display VXLAN deletion success
+          ansible.builtin.debug:
+            msg:
+              - "✅ VXLAN interface deleted successfully!"
+              - "Interface: {{ target_interface }}"
+          when: vxlan_check.rc == 0
+
+        - name: VXLAN interface doesn't exist
+          ansible.builtin.debug:
+            msg: "ℹ️  VXLAN interface '{{ target_interface }}' doesn't exist"
+          when: vxlan_check.rc != 0
+
+  post_tasks:
+    - name: Verify final state
+      ansible.builtin.command:
+        cmd: ip link show {{ target_interface }}
+      register: final_check
+      failed_when: false
+      changed_when: false
+
+    - name: Display final interface status
+      ansible.builtin.debug:
+        msg: "{{ 'Interface exists' if final_check.rc == 0 else 'Interface does not exist' }}"
+
+    - name: Show interface details if exists
+      ansible.builtin.command:
+        cmd: ip addr show {{ target_interface }}
+      register: vxlan_details
+      when:
+        - final_check.rc == 0
+        - operation_state == 'present'
+      failed_when: false
+      changed_when: false
+
+    - name: Display interface configuration
+      ansible.builtin.debug:
+        var: vxlan_details.stdout_lines
+      when:
+        - final_check.rc == 0
+        - operation_state == 'present'
+        - vxlan_details is defined

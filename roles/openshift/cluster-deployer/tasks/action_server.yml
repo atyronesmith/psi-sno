@@ -22,9 +22,15 @@
 - name: Display server action result
   ansible.builtin.debug:
     msg: "Action '{{ server_action }}' initiated for server '{{ project_name }}'."
-  when: server_reset_result is defined and not server_reset_result.failed
+  when:
+    - server_reset_result is defined
+    - not server_reset_result.skipped | default(false)
+    - not server_reset_result.failed | default(false)
 
 - name: Handle failure in server action
   ansible.builtin.fail:
     msg: "Failed to initiate '{{ server_action }}' for server '{{ project_name }}'. Result: {{ server_reset_result }}"
-  when: server_reset_result is defined and server_reset_result.failed
+  when:
+    - server_reset_result is defined
+    - not server_reset_result.skipped | default(false)
+    - server_reset_result.failed | default(false)

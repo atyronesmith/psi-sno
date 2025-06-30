@@ -1,14 +1,18 @@
 ---
 - name: Start Playbook
-  hosts: all
+  hosts: localhost
   gather_facts: false
-  remote_user: core
+  connection: local
   vars_files:
-    - common_vars.yml
+    - ../../inventory/group_vars/all.yml
 
   tasks:
-    - name: Read project metadata
-      ansible.builtin.include_tasks: tasks/read_metadata.yml
+    - name: Read project metadata using iso-builder role
+      ansible.builtin.include_role:
+        name: openshift/iso-builder
+        tasks_from: read_metadata
 
-    - name: Include tasks
-      ansible.builtin.include_tasks: tasks/start_cluster.yml
+    # TODO: Implement start_cluster tasks or use appropriate role
+    - name: Start cluster tasks placeholder
+      ansible.builtin.debug:
+        msg: "Start cluster functionality needs to be implemented"

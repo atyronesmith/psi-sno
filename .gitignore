@@ -6,6 +6,21 @@ proj-*
 cr-gen
 secrets
 
+# Python virtual environments
+venv/
+env/
+.venv/
+.env/
+pyvenv.cfg
+
+# Python cache and bytecode
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.Python
+
 # Build artifacts
 build/
 secrets/*.txt
@@ -19,21 +34,14 @@ secrets/*.key
 generated/
 *.retry
 .ansible/
-**/__pycache__/
-*.pyc
 
-# Build artifacts
-build/
-secrets/*.txt
-secrets/*.pub
-secrets/*.pem
-secrets/*.key
-!secrets/*.example
-!secrets/.keep
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Generated configs
-generated/
-*.retry
-.ansible/
-**/__pycache__/
-*.pyc
+# OS specific
+.DS_Store
+Thumbs.db

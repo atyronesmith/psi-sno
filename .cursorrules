@@ -1,0 +1,156 @@
+# PSI-SNO OpenShift Deployment Project
+
+## Project Overview
+This project manages OpenShift Single Node (SNO) deployments in the PSI environment using Ansible automation and Make targets.
+
+## Required Environment Setup
+
+Before running any Ansible playbooks or Makefile targets, you must complete these setup steps:
+
+### 1. Activate Python Virtual Environment
+```bash
+source ~/psi/bin/activate
+```
+
+### 2. Set OpenStack Cloud Environment
+```bash
+export OS_CLOUD=psi
+```
+
+### 3. Verify Environment
+You can verify your setup with:
+```bash
+# Check Python environment
+which python
+which ansible
+
+# Verify OpenStack connectivity
+openstack server list
+```
+
+## Running Commands
+
+### Makefile Targets
+Once the environment is setup, you can use these common targets:
+
+```bash
+# Interactive project management
+make delete-project           # Interactive project deletion
+make delete-project-y         # Skip confirmation prompts
+make delete-project-name PROJECT=myproject  # Delete specific project
+
+# Environment operations
+make deploy-psi              # Deploy to PSI environment
+make deploy-psi PROJECT=name # Deploy specific project (bypasses interactive selection)
+make destroy-psi             # Destroy PSI environment
+make create-iso-psi          # Create ISO for PSI environment
+make bootstrap-psi           # Wait for OpenShift bootstrap completion
+make validate-psi            # Run validation checks
+
+# Cluster management
+make start-psi               # Start the PSI cluster
+make stop-psi                # Stop the PSI cluster
+make health-check-psi        # Run health checks
+make info-psi                # Get cluster information
+
+# Development tools
+make lint                    # Run ansible-lint and yamllint
+make syntax-check            # Run syntax checks
+make test                    # Run all tests
+make clean                   # Clean build artifacts
+```
+
+### Direct Ansible Playbook Execution
+```bash
+# Deploy cluster
+ansible-playbook -i inventory/environments/psi playbooks/deploy.yml
+
+# Deploy specific project (bypass interactive selection)
+ansible-playbook -i inventory/environments/psi playbooks/deploy.yml -e project_name=psi-example
+
+# Create ISO
+ansible-playbook -i inventory/environments/psi playbooks/create-iso.yml
+
+# Maintenance tasks
+ansible-playbook -i inventory/environments/psi playbooks/maintenance/start-cluster.yml
+```
+
+## Project Structure
+- `playbooks/` - Ansible playbooks for various operations
+- `roles/` - Ansible roles organized by function
+- `inventory/environments/psi/` - PSI environment configuration
+- `configs/` - Configuration files including Kubernetes NNCP
+- `scripts/` - Shell scripts for automation
+- `build/` - Generated artifacts and project directories
+
+## Important Notes
+- Always ensure the virtual environment is activated before running commands
+- The OS_CLOUD=psi variable is required for OpenStack authentication
+- Use `make help` to see all available Makefile targets
+- Project artifacts are stored in `build/projects/`
+- Network configurations are defined in `configs/kubernetes/nncp.yaml`
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### DNS Configuration Failures
+**Problem**: `ansible_default_ipv4` undefined when configuring remote DNS
+**Solution**: The DNS role now includes fact gathering for remote DNS hosts:
+```yaml
+- name: Gather facts from remote DNS server
+  ansible.builtin.setup:
+  delegate_to: "{{ dns_fip }}"
+  remote_user: "{{ dns_user }}"
+```
+
+#### Interactive Project Selection
+**Problem**: Deployment hangs on project selection prompts
+**Solutions**:
+- Use `make deploy-psi PROJECT=projectname` to bypass interactive selection
+- Or use `ansible-playbook` with `-e project_name=projectname`
+
+#### Variable Name Issues
+**Problem**: Undefined variables like `project_instance_ip_sno`
+**Solution**: Use correct variable names:
+- `project_instance_ip` (for SNO network IP)
+- `project_instance_ip_os` (for OpenStack network IP)
+- `project_fip` (for floating IP)
+
+#### Action Server Task Failures
+**Problem**: Conditional checks fail on skipped tasks
+**Solution**: Use proper conditional checks with defaults:
+```yaml
+when:
+  - server_reset_result is defined
+  - not server_reset_result.skipped | default(false)
+  - not server_reset_result.failed | default(false)
+```
+
+### Successful Deployment Indicators
+A successful deployment will show:
+- Environment variables properly set (`(psi)` prompt visible)
+- Project selection bypassed when PROJECT parameter used
+- DNS fact gathering completed without errors
+- Final configuration summary displayed with correct IPs
+- Zero failed tasks in PLAY RECAP
+
+### Key Files for Common Issues
+- DNS role: `roles/dns/cluster_dns/tasks/main.yml`
+- Deployment logic: `roles/openshift/cluster-deployer/tasks/deploy_cluster.yml`
+- Project selection: `roles/openshift/iso-builder/tasks/read_metadata.yml`
+- Variable definitions: `inventory/group_vars/all.yml`, `common_vars.yml`
+
+## Development Best Practices
+1. Always test with a specific PROJECT parameter first
+2. Check fact gathering works for remote DNS hosts
+3. Verify variable names match across roles
+4. Use proper conditional checks for skipped tasks
+5. Environment setup is critical - verify before debugging code issues
+
+## Recent Fixes Applied (Reference)
+- Added DNS fact gathering to prevent `ansible_default_ipv4` undefined errors
+- Enhanced Makefile to support PROJECT parameter for non-interactive deployment
+- Fixed variable naming inconsistencies in final configuration summary
+- Improved conditional logic for action server tasks
+- Documented complete working deployment workflow

@@ -24,14 +24,14 @@
 - name: Get floating IP for cluster
   ansible.builtin.include_tasks: get_server_fip.yml
 
-- name: Dynamically include the 'add-dns-cluster' role tasks
+- name: Dynamically include the 'cluster_dns' tasks from the 'dns/cluster_dns' role
   ansible.builtin.include_role:
-    name: dns/cluster-dns
+    name: dns/cluster_dns
 
 - name: Display final configuration summary
   ansible.builtin.debug:
     msg:
-      - "SNO server '{{ project_name }}' created with IP '{{ project_instance_ip_sno }}'."
+      - "SNO server '{{ project_name }}' created with IP '{{ project_instance_ip }}'."
       - "Floating IP '{{ project_fip }}' attached to the SNO server."
       - "OpenStack network '{{ project_name }}-os' created with subnet '{{ project_name }}-os' ({{ project_openstack_cidr }})."
       - "PSI base networking and SNO network configured successfully."

@@ -184,23 +184,62 @@
       Trying to upload the ISO image automatically...
       ----------------------------------------------------------------------
 
-- name: Upload an image from a local file named {{ metadata_location }}/{{ project_iso_image }} # noqa name[template]
-  openstack.cloud.image:
-    name: "{{ project_iso_image }}"
-    container_format: bare
-    disk_format: iso
-    state: present
-    visibility: shared
-    filename: "{{ metadata_location }}/{{ project_iso_image }}"
-    timeout: 300
-    sdk_log_path: "{{ metadata_location }}/openstack_sdk.log"
-    sdk_log_level: DEBUG
-  register: image_upload_result
+- name: Check if image already exists in OpenStack
+  ansible.builtin.shell: |
+    openstack image show "{{ project_iso_image }}" --format json
+  register: existing_image_info
+  failed_when: false
+  changed_when: false
 
-- name: Output formatted OpenStack command to upload ISOa
+- name: Upload an image using OpenStack CLI from {{ metadata_location }}/{{ project_iso_image }} # noqa name[template]
+  ansible.builtin.shell: |
+    openstack image create \
+      --progress \
+      --disk-format iso \
+      --container-format bare \
+      --shared \
+      --file "{{ metadata_location }}/{{ project_iso_image }}" \
+      "{{ project_iso_image }}"
+  register: image_upload_result
+  retries: 3
+  delay: 30
+  until: image_upload_result.rc == 0
+  failed_when: image_upload_result.rc != 0
+  when: existing_image_info.rc != 0
+
+- name: Display image upload success message
+  ansible.builtin.debug:
+    msg: "Image '{{ project_iso_image }}' already exists, skipping upload."
+  when: existing_image_info.rc == 0
+
+- name: Display upload success message
+  ansible.builtin.debug:
+    msg: "✅ Image '{{ project_iso_image }}' uploaded successfully using OpenStack CLI."
+  when:
+    - existing_image_info.rc != 0
+    - image_upload_result.rc == 0
+
+- name: Display upload failure troubleshooting information
   ansible.builtin.debug:
     msg: "{{ image_command | split('\n') }}"
   vars:
     image_command: |
-      Image upload failed.  Please upload the ISO image manually:
-  when: image_upload_result is failed or (image_upload_result is defined and image_upload_result.failed | default(false))
+      ❌ Image upload failed after {{ image_upload_result.attempts | default(3) }} retries.
+
+      Command that failed:
+      openstack image create --progress --disk-format iso --container-format bare --public --file {{ metadata_location }}/{{ project_iso_image }} {{ project_iso_image }}
+
+      Troubleshooting steps:
+      1. Verify network connectivity to OpenStack API: curl -I $OS_AUTH_URL
+      2. Check available storage quota: openstack quota show --usage
+      3. Monitor upload progress: watch -n 5 "openstack image list | grep {{ project_iso_image }}"
+      4. Check OpenStack credentials: openstack token issue
+      5. Verify file exists and is readable: ls -la {{ metadata_location }}/{{ project_iso_image }}
+
+      Error output:
+      {{ image_upload_result.stderr | default('No error output available') }}
+
+      For more details, see: docs/troubleshooting-image-upload.md
+  when:
+    - existing_image_info.rc != 0
+    - image_upload_result.rc != 0

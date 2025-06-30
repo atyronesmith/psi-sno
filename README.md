@@ -11,20 +11,25 @@ Automated deployment of Single-Node OpenShift (SNO) clusters with Red Hat OpenSt
 git clone <repository-url> psi-sno
 cd psi-sno
 
-# 2. Install dependencies
+# 2. Setup Python virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+
+# 3. Install dependencies
 make install-deps
 
-# 3. Configure secrets
+# 4. Configure secrets
 cp secrets/pull-secret.txt.example secrets/pull-secret.txt
 cp secrets/ssh-key.pub.example secrets/ssh-key.pub
 # Edit files with your actual secrets
 
-# 4. Source OpenStack credentials
+# 5. Source OpenStack credentials
 #source ~/psi-openrc.sh
 This repo assumes a cloud.yaml exists and that OS_CLOUD is set to the PSI cloud
 
-# 5. Deploy to development
-make deploy-dev
+# 6. Deploy to PSI environment
+make deploy-psi
 ```
 
 ## 📁 Repository Structure
@@ -102,15 +107,63 @@ make deploy-dev
 
 ## 🛠️ Prerequisites
 
-### Required Tools
-- **Ansible** (2.14+) with collections:
-  ```bash
-  pip install ansible-core ansible-lint yamllint
-  ansible-galaxy collection install -r requirements.yml
-  ```
-- **OpenShift CLI Tools**: `openshift-install`, `oc`
+### System Requirements
+- **Python** 3.8+ (recommended: 3.11+)
+- **Git** for version control
 - **Container Runtime**: Podman (for coreos-installer)
-- **OpenStack CLI**: `python-openstackclient`
+
+### Python Virtual Environment Setup (Recommended)
+
+Using a Python virtual environment is strongly recommended to avoid conflicts with system packages:
+
+```bash
+# Create a virtual environment
+python3 -m venv venv
+
+# Activate the virtual environment
+source venv/bin/activate
+
+# Upgrade pip to latest version
+pip install --upgrade pip
+
+# Install Ansible and required tools
+pip install ansible-core ansible-lint yamllint python-openstackclient
+
+# Install Ansible collections
+ansible-galaxy collection install -r requirements.yml
+```
+
+**Note**: Always activate your virtual environment before running Ansible commands:
+```bash
+source venv/bin/activate
+```
+
+To deactivate the virtual environment when done:
+```bash
+deactivate
+```
+
+### Alternative: System-wide Installation
+If you prefer system-wide installation (not recommended for production use):
+
+```bash
+# Install required tools system-wide
+pip install ansible-core ansible-lint yamllint python-openstackclient
+ansible-galaxy collection install -r requirements.yml
+```
+
+### Additional Tools
+- **OpenShift CLI Tools**: `openshift-install`, `oc`
+  ```bash
+  # Download from Red Hat's official releases
+  curl -O https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-install-linux.tar.gz
+  curl -O https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+
+  # Extract and add to PATH
+  tar -xzf openshift-install-linux.tar.gz
+  tar -xzf openshift-client-linux.tar.gz
+  sudo mv openshift-install oc /usr/local/bin/
+  ```
 
 ### Environment Setup
 ```bash
@@ -128,26 +181,19 @@ openstack server list
 Deploy to different environments using environment-specific inventories:
 
 ```bash
-# Development environment
-make deploy-dev
-ansible-playbook -i inventory/environments/dev playbooks/deploy.yml
-
-# Staging environment
-ansible-playbook -i inventory/environments/staging playbooks/deploy.yml
-
-# Production environment
-ansible-playbook -i inventory/environments/prod playbooks/deploy.yml
+# PSI environment
+make deploy-psi
+ansible-playbook -i inventory/environments/psi playbooks/deploy.yml
 ```
 
 ### Common Operations
 
 ```bash
 # Create installation ISO
-make create-iso-dev
-ansible-playbook playbooks/create-iso.yml
+make create-iso
 
 # Bootstrap cluster
-make bootstrap-dev
+make bootstrap-psi
 ansible-playbook playbooks/bootstrap.yml
 
 # Get cluster information
@@ -158,13 +204,20 @@ ansible-playbook playbooks/maintenance/start-cluster.yml
 ansible-playbook playbooks/maintenance/stop-cluster.yml
 
 # Destroy environment
-make destroy-dev
+make destroy-psi
 ansible-playbook playbooks/destroy.yml
+
+# Clean up project directories
+make delete-project
+ansible-playbook playbooks/delete-project.yml
 ```
 
 ### Development Workflow
 
 ```bash
+# Activate virtual environment (if using)
+source venv/bin/activate
+
 # Install dependencies
 make install-deps
 
@@ -179,6 +232,56 @@ make test
 
 # Clean build artifacts
 make clean
+
+# Deactivate virtual environment when done
+deactivate
+```
+
+### Project Management
+
+The system creates project directories in `build/projects/` for each deployment. These contain installation assets, ISOs, and configuration files.
+
+```bash
+# List current projects
+ls -la build/projects/
+
+# Interactively delete a project
+make delete-project
+
+# Clean all build artifacts (including projects)
+make clean
+```
+
+**Interactive Project Deletion Features:**
+- Lists all available project directories with numbered selection
+- Shows project details (size, file count, last modified)
+- Displays project contents summary
+- Requires explicit confirmation before deletion
+- Creates deletion log for audit trail
+- Verifies successful deletion
+- Shows remaining projects after deletion
+
+### Virtual Environment Management
+
+For daily development workflow with virtual environments:
+
+```bash
+# Start working session
+cd psi-sno
+source venv/bin/activate
+
+# Update dependencies (when requirements change)
+pip install --upgrade -r requirements.txt
+ansible-galaxy collection install -r requirements.yml --upgrade
+
+# Check virtual environment status
+pip list | grep ansible
+
+# Create requirements.txt from current environment
+pip freeze > requirements.txt
+
+# End working session
+deactivate
 ```
 
 ## ⚙️ Configuration
@@ -202,10 +305,10 @@ dns_fip: "10.0.108.151"
 
 ### Environment-Specific Configuration
 
-Override settings in `inventory/environments/{env}/group_vars/all.yml`:
+Override settings in `inventory/environments/psi/group_vars/all.yml`:
 
 ```yaml
-# Development overrides
+# PSI environment overrides
 sno_flavor: "g.memory.large"
 sno_volume_size: 80
 bootstrap_timeout_minutes: 20
@@ -362,10 +465,19 @@ openstack floating ip list
 ### Development Setup
 
 1. Fork the repository
-2. Create a feature branch
-3. Make changes and test
-4. Run linting: `make lint`
-5. Submit a pull request
+2. Clone your fork and setup virtual environment:
+   ```bash
+   git clone <your-fork-url> psi-sno
+   cd psi-sno
+   make setup-venv
+   source venv/bin/activate
+   ```
+3. Create a feature branch
+4. Make changes and test
+5. Run linting: `make lint`
+6. Submit a pull request
+
+**Note**: Always work within the virtual environment to ensure consistent dependencies.
 
 ### Code Standards
 
