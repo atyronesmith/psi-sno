@@ -10,7 +10,7 @@ _make_completion() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Define all available make targets
-    targets="help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv download-iso create-iso create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi deploy-psi destroy-psi health-check-psi logs-psi backup-psi restore-psi vxlan-create vxlan-delete vxlan-status delete-project delete-project-y delete-project-name boot-sno"
+    targets="help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv download-iso create-iso create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi deploy-psi destroy-psi health-check-psi logs-psi backup-psi restore-psi vxlan-create vxlan-delete vxlan-status delete-project delete-project-y delete-project-name delete-project-all boot-sno"
 
     # Handle PROJECT parameter for specific targets (optional for deploy-psi and boot-sno)
     if [[ "$prev" == "deploy-psi" || "$prev" == "boot-sno" || "$prev" == "delete-project-name" ]]; then
@@ -51,13 +51,14 @@ show_make_targets() {
     echo "  Development: help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv"
     echo "  PSI Environment: deploy-psi destroy-psi create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi health-check-psi logs-psi backup-psi restore-psi"
     echo "  Server Management: boot-sno"
-    echo "  Project Management: delete-project delete-project-y delete-project-name"
+    echo "  Project Management: delete-project delete-project-y delete-project-name delete-project-all"
     echo "  VXLAN: vxlan-create vxlan-delete vxlan-status"
     echo ""
     echo "Usage examples:"
     echo "  make deploy-psi PROJECT=my-cluster    # or just: make deploy-psi"
     echo "  make boot-sno PROJECT=my-cluster      # or just: make boot-sno"
     echo "  make delete-project-name PROJECT=my-cluster"
+    echo "  make delete-project-all                   # Delete ALL projects"
 }
 
 echo "PSI-SNO Makefile completion loaded!"

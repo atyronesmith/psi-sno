@@ -1,4 +1,4 @@
-.PHONY: help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv setup-completion download-iso create-iso create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi deploy-psi destroy-psi health-check-psi logs-psi backup-psi restore-psi vxlan-create vxlan-delete vxlan-status delete-project delete-project-y delete-project-name boot-sno
+.PHONY: help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv setup-completion download-iso create-iso create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi deploy-psi destroy-psi health-check-psi logs-psi backup-psi restore-psi vxlan-create vxlan-delete vxlan-status delete-project delete-project-y delete-project-name delete-project-all boot-sno gen-machineconfig-psi
 
 help:
 	@echo "Available targets:"
@@ -20,6 +20,7 @@ help:
 	@echo "  deploy-psi PROJECT=name - Deploy specific project (bypasses interactive selection)"
 	@echo "  destroy-psi    - Destroy PSI environment"
 	@echo "  create-iso-psi - Create ISO for PSI environment"
+	@echo "  gen-machineconfig-psi - Generate machine configurations from Butane templates"
 	@echo "  bootstrap-psi  - Wait for OpenShift bootstrap completion"
 	@echo "  validate-psi   - Run validation checks on PSI environment"
 	@echo "  info-psi       - Get cluster information"
@@ -37,6 +38,7 @@ help:
 	@echo "  delete-project      - Interactively delete a project from build/projects/"
 	@echo "  delete-project-y    - Select project interactively, skip confirmation prompt"
 	@echo "  delete-project-name - Delete specific project: make delete-project-name PROJECT=name"
+	@echo "  delete-project-all  - Delete ALL projects: make delete-project-all"
 	@echo ""
 	@echo "VXLAN management:"
 	@echo "  vxlan-create   - Create VXLAN endpoint for internalapi network"
@@ -158,6 +160,18 @@ create-iso-psi:
 	@echo "Creating ISO for PSI environment..."
 	ansible-playbook -i inventory/environments/psi playbooks/create-iso.yml
 
+gen-machineconfig-psi:
+	@echo "Generating machine configurations from Butane templates..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if [ -z "$$OS_CLOUD" ]; then \
+		echo "❌ Error: OS_CLOUD environment variable not set. Please run 'export OS_CLOUD=psi' first."; \
+		exit 1; \
+	fi
+	ansible-playbook playbooks/gen-machineconfig.yml --tags machineconfig
+
 bootstrap-psi:
 	@echo "Waiting for OpenShift bootstrap completion in PSI..."
 	ansible-playbook -i inventory/environments/psi playbooks/bootstrap.yml
@@ -250,6 +264,10 @@ delete-project-name:
 	fi
 	@echo "Deleting project '$(PROJECT)' with auto-confirmation..."
 	ansible-playbook playbooks/delete-project.yml -e auto_confirm=true -e target_project="$(PROJECT)"
+
+delete-project-all:
+	@echo "Deleting ALL projects with auto-confirmation..."
+	ansible-playbook playbooks/delete-project.yml -e auto_confirm=true -e target_project="all"
 
 # Usage: make boot-sno [PROJECT=myproject]
 boot-sno:
