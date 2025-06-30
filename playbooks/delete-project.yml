@@ -53,6 +53,7 @@
           {% for project in project_names %}
           {{ loop.index }}. {{ project }}
           {% endfor %}
+          {{ project_names | length + 1 }}. *** DELETE ALL PROJECTS ***
 
     - name: Display project selection menu
       ansible.builtin.pause:
@@ -65,14 +66,28 @@
           Available project directories:
           {{ numbered_projects }}
 
-          Enter the number of the project to delete (1-{{ project_names | length }}):
+          Enter the number of the project to delete (1-{{ project_names | length }}) or {{ project_names | length + 1 }} for ALL:
       register: user_selection
       when: target_project is not defined
+
+    - name: Handle target_project="all" case
+      ansible.builtin.set_fact:
+        user_selection:
+          user_input: "{{ project_names | length + 1 }}"
+      when: target_project is defined and target_project == "all"
+
+    - name: Display all projects selection message
+      ansible.builtin.debug:
+        msg:
+          - "🎯 TARGET PROJECT MODE: ALL PROJECTS selected for deletion"
+          - "Available projects: {{ project_names }}"
+          - "Target: DELETE ALL PROJECTS"
+      when: target_project is defined and target_project == "all"
 
     - name: Find target project index when target_project is specified
       ansible.builtin.set_fact:
         target_project_index: "{{ project_names.index(target_project) + 1 }}"
-      when: target_project is defined and target_project in project_names
+      when: target_project is defined and target_project != "all" and target_project in project_names
 
     - name: Fail if target project not found
       ansible.builtin.fail:
@@ -80,13 +95,14 @@
           ❌ Error: Project '{{ target_project }}' not found!
 
           Available projects: {{ project_names | join(', ') }}
-      when: target_project is defined and target_project not in project_names
+          Use "all" to delete all projects.
+      when: target_project is defined and target_project != "all" and target_project not in project_names
 
     - name: Auto-select target project when specified
       ansible.builtin.set_fact:
         user_selection:
           user_input: "{{ target_project_index }}"
-      when: target_project is defined and target_project in project_names
+      when: target_project is defined and target_project != "all" and target_project in project_names
 
     - name: Display target project selection message
       ansible.builtin.debug:
@@ -94,55 +110,66 @@
           - "🎯 TARGET PROJECT MODE: Selecting specified project"
           - "Available projects: {{ project_names }}"
           - "Target project: {{ target_project }}"
-      when: target_project is defined and target_project in project_names
+      when: target_project is defined and target_project != "all" and target_project in project_names
+
+    - name: Determine if user selected "all" option
+      ansible.builtin.set_fact:
+        delete_all_projects: "{{ user_selection.user_input | int == (project_names | length + 1) }}"
 
     - name: Validate user input
       ansible.builtin.set_fact:
         selected_index: "{{ user_selection.user_input | int - 1 }}"
       failed_when: >
         (user_selection.user_input | int < 1) or
-        (user_selection.user_input | int > project_names | length) or
+        (user_selection.user_input | int > project_names | length + 1) or
         (user_selection.user_input != (user_selection.user_input | int | string))
+      when: not delete_all_projects
 
-    - name: Set selected project details
+    - name: Set projects to delete (single project mode)
       ansible.builtin.set_fact:
-        selected_project_name: "{{ project_names[selected_index | int] }}"
-        selected_project_path: "{{ projects_base_dir }}/{{ project_names[selected_index | int] }}"
+        projects_to_delete:
+          - name: "{{ project_names[selected_index | int] }}"
+            path: "{{ projects_base_dir }}/{{ project_names[selected_index | int] }}"
+      when: not delete_all_projects
 
-    - name: Get project directory information
-      ansible.builtin.stat:
-        path: "{{ selected_project_path }}"
-      register: selected_project_stat
+    - name: Set projects to delete (all projects mode)
+      ansible.builtin.set_fact:
+        projects_to_delete: "{{ project_names | map('regex_replace', '^(.*)$', '{\"name\": \"\\1\", \"path\": \"' + projects_base_dir + '/\\1\"}') | map('from_json') | list }}"
+      when: delete_all_projects
 
-    - name: Calculate project directory size
+    - name: Calculate total size of projects to delete
       ansible.builtin.shell: |
-        du -sh "{{ selected_project_path }}" | cut -f1
-      register: project_size_result
+        set -o pipefail
+        du -sh {{ projects_to_delete | map(attribute='path') | map('quote') | join(' ') }} | awk '{total+=$1} END {print total "K"}' || echo "0K"
+      register: total_size_result
       changed_when: false
 
-    - name: Display project information
-      ansible.builtin.debug:
-        msg:
-          - "Selected project: {{ selected_project_name }}"
-          - "Path: {{ selected_project_path }}"
-          - "Size: {{ project_size_result.stdout }}"
-          - "Last modified: {{ '%Y-%m-%d %H:%M:%S' | strftime(selected_project_stat.stat.mtime) }}"
-
-    - name: List contents of selected project directory
+    - name: Count total files in projects to delete
       ansible.builtin.find:
-        paths: "{{ selected_project_path }}"
+        paths: "{{ projects_to_delete | map(attribute='path') | list }}"
         recurse: true
         file_type: any
-      register: project_contents
+      register: all_project_contents
 
-    - name: Display project contents summary
+    - name: Display single project information
       ansible.builtin.debug:
         msg:
-          - "Project contains {{ project_contents.files | length }} files/directories"
-          - "Key files found:"
-          - "{{ project_contents.files | map(attribute='path') | map('basename') | select('match', '.*\\.(yaml|yml|json|log|iso|ign)$') | list | sort }}"
+          - "Selected project: {{ projects_to_delete[0].name }}"
+          - "Path: {{ projects_to_delete[0].path }}"
+          - "Size: {{ total_size_result.stdout }}"
+          - "Files/directories: {{ all_project_contents.files | length }}"
+      when: not delete_all_projects
 
-    - name: Confirm deletion with user
+    - name: Display all projects information
+      ansible.builtin.debug:
+        msg:
+          - "Selected: ALL PROJECTS ({{ projects_to_delete | length }} projects)"
+          - "Projects: {{ projects_to_delete | map(attribute='name') | join(', ') }}"
+          - "Total size: {{ total_size_result.stdout }}"
+          - "Total files/directories: {{ all_project_contents.files | length }}"
+      when: delete_all_projects
+
+    - name: Confirm single project deletion with user
       ansible.builtin.pause:
         prompt: |
 
@@ -152,69 +179,121 @@
 
           You are about to DELETE the following project:
 
-          Project Name: {{ selected_project_name }}
-          Project Path: {{ selected_project_path }}
-          Directory Size: {{ project_size_result.stdout }}
-          Number of Files: {{ project_contents.files | length }}
+          Project Name: {{ projects_to_delete[0].name }}
+          Project Path: {{ projects_to_delete[0].path }}
+          Directory Size: {{ total_size_result.stdout }}
+          Number of Files: {{ all_project_contents.files | length }}
 
           ⚠️  WARNING: This action cannot be undone! ⚠️
 
           Are you sure you want to delete this project? (yes/no):
       register: deletion_confirmation
-      when: auto_confirm is not defined or not auto_confirm
+      when: (auto_confirm is not defined or not auto_confirm) and not delete_all_projects
+
+    - name: Confirm all projects deletion with user
+      ansible.builtin.pause:
+        prompt: |
+
+          ========================================
+          ⚠️  DELETE ALL PROJECTS CONFIRMATION  ⚠️
+          ========================================
+
+          You are about to DELETE ALL {{ projects_to_delete | length }} PROJECTS:
+
+          Projects: {{ projects_to_delete | map(attribute='name') | join(', ') }}
+          Total Size: {{ total_size_result.stdout }}
+          Total Files: {{ all_project_contents.files | length }}
+
+          ⚠️  CRITICAL WARNING: This will delete ALL project data! ⚠️
+          ⚠️  This action cannot be undone! ⚠️
+
+          Type "DELETE ALL" to confirm (case-sensitive):
+      register: deletion_confirmation
+      when: (auto_confirm is not defined or not auto_confirm) and delete_all_projects
 
     - name: Auto-confirm deletion when auto_confirm is enabled
       ansible.builtin.set_fact:
         deletion_confirmation:
-          user_input: "yes"
+          user_input: "{{ 'DELETE ALL' if delete_all_projects else 'yes' }}"
       when: auto_confirm is defined and auto_confirm
 
-    - name: Display auto-confirmation message
+    - name: Display auto-confirmation message for single project
       ansible.builtin.debug:
         msg:
           - "🤖 AUTO-CONFIRM MODE: Skipping deletion confirmation prompt"
-          - "Project Name: {{ selected_project_name }}"
-          - "Project Path: {{ selected_project_path }}"
-          - "Directory Size: {{ project_size_result.stdout }}"
-          - "Number of Files: {{ project_contents.files | length }}"
+          - "Project Name: {{ projects_to_delete[0].name }}"
+          - "Project Path: {{ projects_to_delete[0].path }}"
+          - "Directory Size: {{ total_size_result.stdout }}"
+          - "Number of Files: {{ all_project_contents.files | length }}"
           - "⚠️  WARNING: This action cannot be undone! ⚠️"
-      when: auto_confirm is defined and auto_confirm
+      when: (auto_confirm is defined and auto_confirm) and not delete_all_projects
 
-    - name: Validate confirmation input
+    - name: Display auto-confirmation message for all projects
+      ansible.builtin.debug:
+        msg:
+          - "🤖 AUTO-CONFIRM MODE: Skipping deletion confirmation prompt"
+          - "Deleting ALL {{ projects_to_delete | length }} PROJECTS"
+          - "Projects: {{ projects_to_delete | map(attribute='name') | join(', ') }}"
+          - "Total Size: {{ total_size_result.stdout }}"
+          - "Total Files: {{ all_project_contents.files | length }}"
+          - "⚠️  CRITICAL WARNING: This will delete ALL project data! ⚠️"
+      when: (auto_confirm is defined and auto_confirm) and delete_all_projects
+
+    - name: Validate single project confirmation input
       ansible.builtin.fail:
         msg: "Operation cancelled by user."
-      when: deletion_confirmation.user_input | lower not in ['yes', 'y']
+      when: not delete_all_projects and deletion_confirmation.user_input | lower not in ['yes', 'y']
 
-    - name: Delete the selected project directory
+    - name: Validate all projects confirmation input
+      ansible.builtin.fail:
+        msg: "Operation cancelled by user. You must type 'DELETE ALL' exactly to confirm."
+      when: delete_all_projects and deletion_confirmation.user_input != 'DELETE ALL'
+
+    - name: Delete project directories
       ansible.builtin.file:
-        path: "{{ selected_project_path }}"
+        path: "{{ item.path }}"
         state: absent
-      register: deletion_result
+      loop: "{{ projects_to_delete }}"
+      register: deletion_results
 
-    - name: Verify deletion was successful
+    - name: Verify all deletions were successful
       ansible.builtin.stat:
-        path: "{{ selected_project_path }}"
-      register: post_deletion_check
+        path: "{{ item.path }}"
+      loop: "{{ projects_to_delete }}"
+      register: post_deletion_checks
 
-    - name: Display deletion success message
+    - name: Check for deletion failures
+      ansible.builtin.set_fact:
+        failed_deletions: "{{ post_deletion_checks.results | selectattr('stat.exists', 'equalto', true) | map(attribute='item.name') | list }}"
+
+    - name: Display deletion success message for single project
       ansible.builtin.debug:
         msg:
           - "✅ Project deletion completed successfully!"
           - ""
-          - "Deleted project: {{ selected_project_name }}"
-          - "Former path: {{ selected_project_path }}"
-          - "Freed space: {{ project_size_result.stdout }}"
-      when: not post_deletion_check.stat.exists
+          - "Deleted project: {{ projects_to_delete[0].name }}"
+          - "Former path: {{ projects_to_delete[0].path }}"
+          - "Freed space: {{ total_size_result.stdout }}"
+      when: not delete_all_projects and failed_deletions | length == 0
 
-    - name: Handle deletion failure
+    - name: Display deletion success message for all projects
+      ansible.builtin.debug:
+        msg:
+          - "✅ All projects deletion completed successfully!"
+          - ""
+          - "Deleted {{ projects_to_delete | length }} projects:"
+          - "{{ projects_to_delete | map(attribute='name') | join(', ') }}"
+          - "Total freed space: {{ total_size_result.stdout }}"
+      when: delete_all_projects and failed_deletions | length == 0
+
+    - name: Handle deletion failures
       ansible.builtin.fail:
         msg: |
-          ❌ Project deletion failed!
+          ❌ Some project deletions failed!
 
-          The directory still exists at: {{ selected_project_path }}
-          Please check permissions and try again, or delete manually with:
-          rm -rf "{{ selected_project_path }}"
-      when: post_deletion_check.stat.exists
+          Failed to delete: {{ failed_deletions | join(', ') }}
+          Please check permissions and try again, or delete manually.
+      when: failed_deletions | length > 0
 
     - name: Display remaining projects
       ansible.builtin.find:
