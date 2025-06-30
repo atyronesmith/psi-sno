@@ -4,7 +4,7 @@
   gather_facts: false
   connection: local
   vars_files:
-    - common_vars.yml  # Load variables from an external file (if needed)
+    - ../../inventory/group_vars/all.yml  # Load variables from an external file (if needed)
 
   tasks:
     - name: "Ensure the output directory exists '{{ ignition_output_dir }}'" # noqa run-once[task]
@@ -31,12 +31,12 @@
     - name: "Process each Butane template"
       when: butane_template_files.files | length > 0 # Only run if templates were found
       block:
-        - name: "Loop through found Butane templates" # noqa run-once[task]
-          ansible.builtin.include_tasks: tasks/process_butane_template.yaml # Using include_tasks for better organization
+        # TODO: Implement process_butane_template.yaml task file or create appropriate role
+        - name: "Process Butane template placeholder" # noqa run-once[task]
+          ansible.builtin.debug:
+            msg: "Processing template: {{ item.path | basename }}"
           loop: "{{ butane_template_files.files }}"
-          loop_control:
-            loop_var: current_butane_template_file_info
-            # label: "{{ current_butane_template_file_info.path | basename }}" # Optional: better loop output
+          # Original line: ansible.builtin.include_tasks: tasks/process_butane_template.yaml
       rescue:
         - name: "Handle errors during template processing"
           ansible.builtin.debug:

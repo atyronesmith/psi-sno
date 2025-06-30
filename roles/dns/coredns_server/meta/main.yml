@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   author: PSI SNO Team
-  description: coredns-server role for PSI SNO deployments
+  description: coredns_server role for PSI SNO deployments
   company: Red Hat
   license: MIT
   min_ansible_version: "2.14"

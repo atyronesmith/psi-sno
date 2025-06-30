@@ -1,0 +1,29 @@
+---
+- name: Debug Playbook Directory
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  tasks:
+    - name: Debug playbook_dir variable
+      ansible.builtin.debug:
+        msg:
+          - "playbook_dir: {{ playbook_dir }}"
+
+    - name: Get current working directory
+      ansible.builtin.shell: pwd
+      register: pwd_result
+      changed_when: false
+
+    - name: Display current directory
+      ansible.builtin.debug:
+        msg: "Current working directory: {{ pwd_result.stdout }}"
+
+    - name: Get parent directory of playbook directory
+      ansible.builtin.shell: dirname "{{ playbook_dir }}"
+      register: parent_dir_result
+      changed_when: false
+
+    - name: Display parent directory
+      ansible.builtin.debug:
+        msg: "Parent of playbook_dir: {{ parent_dir_result.stdout }}"

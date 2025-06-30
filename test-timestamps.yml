@@ -1,0 +1,39 @@
+---
+- name: Test Timestamp Generation
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  tasks:
+    - name: Get current timestamp
+      ansible.builtin.shell: date +%s
+      register: current_timestamp_result
+      changed_when: false
+
+    - name: Get current ISO timestamp
+      ansible.builtin.shell: date -Iseconds
+      register: current_iso_timestamp_result
+      changed_when: false
+
+    - name: Get current user
+      ansible.builtin.shell: whoami
+      register: current_user_result
+      changed_when: false
+
+    - name: Display timestamp information
+      ansible.builtin.debug:
+        msg:
+          - "Unix timestamp: {{ current_timestamp_result.stdout }}"
+          - "ISO timestamp: {{ current_iso_timestamp_result.stdout }}"
+          - "Current user: {{ current_user_result.stdout }}"
+
+    - name: Create test backup info
+      ansible.builtin.set_fact:
+        test_backup_info:
+          project_name: "test-project"
+          deleted_at: "{{ current_iso_timestamp_result.stdout }}"
+          deleted_by: "{{ current_user_result.stdout }}"
+
+    - name: Display backup info format
+      ansible.builtin.debug:
+        msg: "{{ test_backup_info | to_nice_yaml }}"

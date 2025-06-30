@@ -154,7 +154,7 @@ echo "Phase 4: Creating configuration files..."
 # Create ansible.cfg
 cat > ansible.cfg << 'EOF'
 [defaults]
-inventory = inventory/environments/dev
+inventory = inventory/environments/psi
 roles_path = roles
 host_key_checking = False
 gathering = smart
@@ -331,17 +331,17 @@ clean:
     find . -name "*.retry" -delete
     find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
-deploy-dev:
-    ansible-playbook -i inventory/environments/dev playbooks/deploy.yml
+deploy-psi:
+    ansible-playbook -i inventory/environments/psi playbooks/deploy.yml
 
-destroy-dev:
-    ansible-playbook -i inventory/environments/dev playbooks/destroy.yml
+destroy-psi:
+    ansible-playbook -i inventory/environments/psi playbooks/destroy.yml
 
-create-iso-dev:
-    ansible-playbook -i inventory/environments/dev playbooks/create-iso.yml
+create-iso-psi:
+    ansible-playbook -i inventory/environments/psi playbooks/create-iso.yml
 
-bootstrap-dev:
-    ansible-playbook -i inventory/environments/dev playbooks/bootstrap.yml
+bootstrap-psi:
+    ansible-playbook -i inventory/environments/psi playbooks/bootstrap.yml
 EOF
 
 # Phase 5: Create GitHub Actions
@@ -500,7 +500,7 @@ EOF
 done
 
 # Development environment specific settings
-cat >> inventory/environments/dev/group_vars/all.yml << 'EOF'
+cat >> inventory/environments/psi/group_vars/all.yml << 'EOF'
 
 # Use smaller resources for development
 sno_flavor: "g.memory.large"

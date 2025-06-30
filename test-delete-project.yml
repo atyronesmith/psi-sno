@@ -1,0 +1,68 @@
+---
+- name: Test Project Directory Listing (No Deletion)
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  tasks:
+    - name: Set projects base directory
+      ansible.builtin.set_fact:
+        projects_base_dir: "{{ playbook_dir }}/build/projects"
+
+    - name: Display resolved path
+      ansible.builtin.debug:
+        msg:
+          - "Resolved projects base directory: {{ projects_base_dir }}"
+
+    - name: Check if build/projects directory exists
+      ansible.builtin.stat:
+        path: "{{ projects_base_dir }}"
+      register: projects_dir_stat
+
+    - name: Find project directories in build/projects
+      ansible.builtin.find:
+        paths: "{{ projects_base_dir }}"
+        file_type: directory
+        recurse: false
+      register: found_project_dirs
+      when: projects_dir_stat.stat.exists
+
+    - name: Display message if no projects found
+      ansible.builtin.debug:
+        msg: "No project directories found in {{ projects_base_dir }}"
+      when: not projects_dir_stat.stat.exists or found_project_dirs.files | length == 0
+
+    - name: Create list of project directory names
+      ansible.builtin.set_fact:
+        project_names: "{{ found_project_dirs.files | map(attribute='path') | map('basename') | sort | list }}"
+      when: projects_dir_stat.stat.exists and found_project_dirs.files | length > 0
+
+    - name: Display current project directories
+      ansible.builtin.debug:
+        msg:
+          - "Current project directories in {{ projects_base_dir }}:"
+          - "{{ project_names | to_nice_json }}"
+      when: projects_dir_stat.stat.exists and found_project_dirs.files | length > 0
+
+    - name: Prepare numbered list for user selection
+      ansible.builtin.set_fact:
+        numbered_projects: |
+          {% for project in project_names %}
+          {{ loop.index }}. {{ project }}
+          {% endfor %}
+      when: projects_dir_stat.stat.exists and found_project_dirs.files | length > 0
+
+    - name: Display project selection menu (test only)
+      ansible.builtin.debug:
+        msg: |
+
+          ========================================
+          PROJECT DELETION MENU (TEST MODE)
+          ========================================
+
+          Available project directories:
+          {{ numbered_projects }}
+
+          This is a test run - no deletion will occur.
+          To actually delete projects, run: make delete-project
+      when: projects_dir_stat.stat.exists and found_project_dirs.files | length > 0

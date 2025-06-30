@@ -1,0 +1,37 @@
+---
+- name: Include role openshift/iso-builder
+  ansible.builtin.include_role:
+    name: openshift/iso-builder
+    tasks_from: read_metadata
+
+- name: Gather facts from remote DNS server
+  ansible.builtin.setup:
+  delegate_to: "{{ dns_fip }}"
+  remote_user: "{{ dns_user }}"
+
+- name: Get default interface from DNS server
+  ansible.builtin.shell: |
+    ip route show default | head -1 | sed 's/.*dev \([^ ]*\).*/\1/'
+  register: dns_default_interface_result
+  delegate_to: "{{ dns_fip }}"
+  remote_user: "{{ dns_user }}"
+  changed_when: false
+
+- name: Set DNS server interface variable
+  ansible.builtin.set_fact:
+    dns_server_interface: "{{ dns_default_interface_result.stdout.strip() }}"
+
+- name: Set ansible_default_ipv4 fact for DNS server context
+  ansible.builtin.set_fact:
+    ansible_default_ipv4:
+      interface: "{{ dns_default_interface_result.stdout.strip() }}"
+  delegate_to: "{{ dns_fip }}"
+  remote_user: "{{ dns_user }}"
+
+- name: Include tasks for configuring remote DNS
+  ansible.builtin.import_tasks: remote_dns.yml
+  delegate_to: "{{ dns_fip }}"
+  remote_user: "{{ dns_user }}"
+
+- name: Include tasks for configuring local DNS
+  ansible.builtin.import_tasks: local_dns.yml

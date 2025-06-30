@@ -1,0 +1,26 @@
+---
+# Fix DNS Cluster Configuration
+# This playbook re-runs the DNS cluster configuration to create missing files
+# like nfv.com.cluster that may have failed during initial deployment
+#
+# Usage: ansible-playbook -i inventory/environments/psi playbooks/fix-dns-cluster.yml
+
+- hosts: localhost
+  gather_facts: false
+  vars:
+    # Update this if your project name is different
+    project_name: "psi-pf4bw"
+  tasks:
+    - name: Re-run DNS cluster configuration
+      ansible.builtin.include_role:
+        name: dns/cluster_dns
+
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg:
+          - "✅ DNS cluster configuration completed!"
+          - "The following files should now exist on {{ dns_fip }}:"
+          - "  - /etc/coredns/clusters/{{ project_domain }}.cluster"
+          - "  - /etc/coredns/clusters/{{ project_domain }}.record"
+          - "  - /etc/coredns/clusters/{{ project_domain }}-*.reverse"
+          - "  - /etc/coredns/clusters/{{ project_domain }}-*.rreverse"

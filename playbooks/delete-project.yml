@@ -1,0 +1,241 @@
+---
+- name: Interactive Project Directory Deletion
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  tasks:
+    - name: Set projects base directory
+      ansible.builtin.set_fact:
+        projects_base_dir: "{{ playbook_dir | dirname }}/build/projects"
+
+    - name: Check if build/projects directory exists
+      ansible.builtin.stat:
+        path: "{{ projects_base_dir }}"
+      register: projects_dir_stat
+
+    - name: Create build/projects directory if it doesn't exist
+      ansible.builtin.file:
+        path: "{{ projects_base_dir }}"
+        state: directory
+        mode: '0755'
+      when: not projects_dir_stat.stat.exists
+
+    - name: Find project directories in build/projects
+      ansible.builtin.find:
+        paths: "{{ projects_base_dir }}"
+        file_type: directory
+        recurse: false
+      register: found_project_dirs
+
+    - name: Display message if no projects found
+      ansible.builtin.debug:
+        msg: "No project directories found in {{ projects_base_dir }}"
+      when: found_project_dirs.files | length == 0
+
+    - name: End playbook if no projects found
+      ansible.builtin.meta: end_play
+      when: found_project_dirs.files | length == 0
+
+    - name: Create list of project directory names
+      ansible.builtin.set_fact:
+        project_names: "{{ found_project_dirs.files | map(attribute='path') | map('basename') | sort | list }}"
+
+    - name: Display current project directories
+      ansible.builtin.debug:
+        msg:
+          - "Current project directories in {{ projects_base_dir }}:"
+          - "{{ project_names | to_nice_json }}"
+
+    - name: Prepare numbered list for user selection
+      ansible.builtin.set_fact:
+        numbered_projects: |
+          {% for project in project_names %}
+          {{ loop.index }}. {{ project }}
+          {% endfor %}
+
+    - name: Display project selection menu
+      ansible.builtin.pause:
+        prompt: |
+
+          ========================================
+          PROJECT DELETION MENU
+          ========================================
+
+          Available project directories:
+          {{ numbered_projects }}
+
+          Enter the number of the project to delete (1-{{ project_names | length }}):
+      register: user_selection
+      when: target_project is not defined
+
+    - name: Find target project index when target_project is specified
+      ansible.builtin.set_fact:
+        target_project_index: "{{ project_names.index(target_project) + 1 }}"
+      when: target_project is defined and target_project in project_names
+
+    - name: Fail if target project not found
+      ansible.builtin.fail:
+        msg: |
+          ❌ Error: Project '{{ target_project }}' not found!
+
+          Available projects: {{ project_names | join(', ') }}
+      when: target_project is defined and target_project not in project_names
+
+    - name: Auto-select target project when specified
+      ansible.builtin.set_fact:
+        user_selection:
+          user_input: "{{ target_project_index }}"
+      when: target_project is defined and target_project in project_names
+
+    - name: Display target project selection message
+      ansible.builtin.debug:
+        msg:
+          - "🎯 TARGET PROJECT MODE: Selecting specified project"
+          - "Available projects: {{ project_names }}"
+          - "Target project: {{ target_project }}"
+      when: target_project is defined and target_project in project_names
+
+    - name: Validate user input
+      ansible.builtin.set_fact:
+        selected_index: "{{ user_selection.user_input | int - 1 }}"
+      failed_when: >
+        (user_selection.user_input | int < 1) or
+        (user_selection.user_input | int > project_names | length) or
+        (user_selection.user_input != (user_selection.user_input | int | string))
+
+    - name: Set selected project details
+      ansible.builtin.set_fact:
+        selected_project_name: "{{ project_names[selected_index | int] }}"
+        selected_project_path: "{{ projects_base_dir }}/{{ project_names[selected_index | int] }}"
+
+    - name: Get project directory information
+      ansible.builtin.stat:
+        path: "{{ selected_project_path }}"
+      register: selected_project_stat
+
+    - name: Calculate project directory size
+      ansible.builtin.shell: |
+        du -sh "{{ selected_project_path }}" | cut -f1
+      register: project_size_result
+      changed_when: false
+
+    - name: Display project information
+      ansible.builtin.debug:
+        msg:
+          - "Selected project: {{ selected_project_name }}"
+          - "Path: {{ selected_project_path }}"
+          - "Size: {{ project_size_result.stdout }}"
+          - "Last modified: {{ '%Y-%m-%d %H:%M:%S' | strftime(selected_project_stat.stat.mtime) }}"
+
+    - name: List contents of selected project directory
+      ansible.builtin.find:
+        paths: "{{ selected_project_path }}"
+        recurse: true
+        file_type: any
+      register: project_contents
+
+    - name: Display project contents summary
+      ansible.builtin.debug:
+        msg:
+          - "Project contains {{ project_contents.files | length }} files/directories"
+          - "Key files found:"
+          - "{{ project_contents.files | map(attribute='path') | map('basename') | select('match', '.*\\.(yaml|yml|json|log|iso|ign)$') | list | sort }}"
+
+    - name: Confirm deletion with user
+      ansible.builtin.pause:
+        prompt: |
+
+          ========================================
+          DELETION CONFIRMATION
+          ========================================
+
+          You are about to DELETE the following project:
+
+          Project Name: {{ selected_project_name }}
+          Project Path: {{ selected_project_path }}
+          Directory Size: {{ project_size_result.stdout }}
+          Number of Files: {{ project_contents.files | length }}
+
+          ⚠️  WARNING: This action cannot be undone! ⚠️
+
+          Are you sure you want to delete this project? (yes/no):
+      register: deletion_confirmation
+      when: auto_confirm is not defined or not auto_confirm
+
+    - name: Auto-confirm deletion when auto_confirm is enabled
+      ansible.builtin.set_fact:
+        deletion_confirmation:
+          user_input: "yes"
+      when: auto_confirm is defined and auto_confirm
+
+    - name: Display auto-confirmation message
+      ansible.builtin.debug:
+        msg:
+          - "🤖 AUTO-CONFIRM MODE: Skipping deletion confirmation prompt"
+          - "Project Name: {{ selected_project_name }}"
+          - "Project Path: {{ selected_project_path }}"
+          - "Directory Size: {{ project_size_result.stdout }}"
+          - "Number of Files: {{ project_contents.files | length }}"
+          - "⚠️  WARNING: This action cannot be undone! ⚠️"
+      when: auto_confirm is defined and auto_confirm
+
+    - name: Validate confirmation input
+      ansible.builtin.fail:
+        msg: "Operation cancelled by user."
+      when: deletion_confirmation.user_input | lower not in ['yes', 'y']
+
+    - name: Delete the selected project directory
+      ansible.builtin.file:
+        path: "{{ selected_project_path }}"
+        state: absent
+      register: deletion_result
+
+    - name: Verify deletion was successful
+      ansible.builtin.stat:
+        path: "{{ selected_project_path }}"
+      register: post_deletion_check
+
+    - name: Display deletion success message
+      ansible.builtin.debug:
+        msg:
+          - "✅ Project deletion completed successfully!"
+          - ""
+          - "Deleted project: {{ selected_project_name }}"
+          - "Former path: {{ selected_project_path }}"
+          - "Freed space: {{ project_size_result.stdout }}"
+      when: not post_deletion_check.stat.exists
+
+    - name: Handle deletion failure
+      ansible.builtin.fail:
+        msg: |
+          ❌ Project deletion failed!
+
+          The directory still exists at: {{ selected_project_path }}
+          Please check permissions and try again, or delete manually with:
+          rm -rf "{{ selected_project_path }}"
+      when: post_deletion_check.stat.exists
+
+    - name: Display remaining projects
+      ansible.builtin.find:
+        paths: "{{ projects_base_dir }}"
+        file_type: directory
+        recurse: false
+      register: remaining_projects
+
+    - name: Show remaining projects summary
+      ansible.builtin.debug:
+        msg:
+          - ""
+          - "Remaining projects in {{ projects_base_dir }}:"
+          - "{{ remaining_projects.files | map(attribute='path') | map('basename') | sort | list }}"
+          - "Total remaining projects: {{ remaining_projects.files | length }}"
+      when: remaining_projects.files | length > 0
+
+    - name: Display empty directory message
+      ansible.builtin.debug:
+        msg:
+          - ""
+          - "No projects remaining in {{ projects_base_dir }}"
+          - "The projects directory is now empty."
+      when: remaining_projects.files | length == 0
