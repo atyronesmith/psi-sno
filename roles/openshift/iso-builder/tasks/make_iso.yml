@@ -138,13 +138,162 @@
   when: temp_install_config_dir_info.path is defined
   delegate_to: localhost
 
+- name: Find all Butane template files (.j2) in configs/openshift/machine-configs/butane
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/../configs/openshift/machine-configs/butane"
+    patterns: "*.j2"
+  register: butane_template_files
+  delegate_to: localhost
+
+- name: Separate merge template from other templates
+  ansible.builtin.set_fact:
+    regular_templates: "{{ butane_template_files.files | rejectattr('path', 'match', '.*merge\\.bu\\.j2$') | list }}"
+    merge_templates: "{{ butane_template_files.files | selectattr('path', 'match', '.*merge\\.bu\\.j2$') | list }}"
+  delegate_to: localhost
+  when: butane_template_files.files | length > 0
+
+- name: Set empty template lists when no templates found
+  ansible.builtin.set_fact:
+    regular_templates: []
+    merge_templates: []
+  delegate_to: localhost
+  when: butane_template_files.files | length == 0
+
+- name: Process regular Butane templates first (excluding merge templates)
+  ansible.builtin.template:
+    src: "{{ template_file.path }}"
+    dest: "{{ metadata_location }}/{{ template_file.path | basename | regex_replace('\\.j2$', '') }}"
+    mode: '0644'
+  loop: "{{ regular_templates | default([]) }}"
+  loop_control:
+    loop_var: template_file
+  when:
+    - temp_install_config_dir_info.path is defined
+    - regular_templates is defined
+    - regular_templates | length > 0
+  delegate_to: localhost
+
+- name: Find generated .bu files in project directory
+  ansible.builtin.find:
+    paths: "{{ metadata_location }}"
+    patterns: "*.bu"
+  register: generated_bu_files
+  delegate_to: localhost
+  when: temp_install_config_dir_info.path is defined
+
+- name: Create list of .bu filenames for merge template
+  ansible.builtin.set_fact:
+    butane_files: "{{ generated_bu_files.files | map(attribute='path') | map('basename') | list }}"
+  delegate_to: localhost
+  when:
+    - temp_install_config_dir_info.path is defined
+    - generated_bu_files.files is defined
+    - generated_bu_files.files | length > 0
+
+- name: Set empty butane_files list when no .bu files found
+  ansible.builtin.set_fact:
+    butane_files: []
+  delegate_to: localhost
+  when:
+    - temp_install_config_dir_info.path is defined
+    - (generated_bu_files.files is not defined or generated_bu_files.files | length == 0)
+
+- name: Process merge Butane templates with list of generated .bu files
+  ansible.builtin.template:
+    src: "{{ template_file.path }}"
+    dest: "{{ metadata_location }}/{{ template_file.path | basename | regex_replace('\\.j2$', '') }}"
+    mode: '0644'
+  loop: "{{ merge_templates | default([]) }}"
+  loop_control:
+    loop_var: template_file
+  when:
+    - temp_install_config_dir_info.path is defined
+    - merge_templates is defined
+    - merge_templates | length > 0
+  delegate_to: localhost
+
+- name: Check if merge.bu file exists for final ignition generation
+  ansible.builtin.stat:
+    path: "{{ metadata_location }}/merge.bu"
+  register: merge_bu_stat
+  delegate_to: localhost
+  when: temp_install_config_dir_info.path is defined
+
+- name: Convert individual .bu files to .ign files first
+  ansible.builtin.shell:
+    cmd: >
+      {{ butane_executable | default('butane') }} --pretty --strict --raw
+      "{{ metadata_location }}/{{ bu_file }}"
+      > "{{ metadata_location }}/{{ ign_file }}"
+    creates: "{{ metadata_location }}/{{ ign_file }}"
+  vars:
+    ign_file: "{{ bu_file | regex_replace('\\.bu$', '.ign') }}"
+  loop: "{{ butane_files | default([]) }}"
+  loop_control:
+    loop_var: bu_file
+  register: butane_convert_result
+  delegate_to: localhost
+  when:
+    - temp_install_config_dir_info.path is defined
+    - butane_files is defined
+    - butane_files | length > 0
+
+- name: Check for butane conversion failures
+  ansible.builtin.fail:
+    msg: |
+      Butane conversion failed for one or more files:
+      {% for result in butane_convert_result.results | default([]) %}
+      {% if result.rc is defined and result.rc != 0 %}
+      - {{ result.bu_file }}: {{ result.stderr | default('Unknown error') }}
+      {% endif %}
+      {% endfor %}
+  when:
+    - temp_install_config_dir_info.path is defined
+    - butane_convert_result is defined
+    - butane_convert_result.results is defined
+    - butane_convert_result.results | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
+  delegate_to: localhost
+
+- name: Display .bu to .ign conversion results
+  ansible.builtin.debug:
+    msg: "✅ Successfully converted {{ item.item }} to {{ item.item | regex_replace('\\.bu$', '.ign') }}"
+  loop: "{{ butane_convert_result.results | default([]) }}"
+  when:
+    - temp_install_config_dir_info.path is defined
+    - item.rc is defined
+    - item.rc == 0
+  delegate_to: localhost
+
+- name: Generate final ignition config from merge.bu using butane
+  ansible.builtin.shell:
+    cmd: >
+      {{ butane_executable | default('butane') }} --pretty --strict --files-dir "{{ metadata_location }}"
+      "{{ metadata_location }}/merge.bu"
+      > "{{ metadata_location }}/sno-final-config.ign"
+    creates: "{{ metadata_location }}/sno-final-config.ign"
+  register: butane_final_result
+  delegate_to: localhost
+  when:
+    - temp_install_config_dir_info.path is defined
+    - merge_bu_stat.stat.exists | default(false)
+  failed_when: butane_final_result.rc != 0
+
+- name: Display final ignition config generation result
+  ansible.builtin.debug:
+    msg: "✅ Successfully generated sno-final-config.ign from merge.bu"
+  when:
+    - temp_install_config_dir_info.path is defined
+    - merge_bu_stat.stat.exists | default(false)
+    - butane_final_result is succeeded
+  delegate_to: localhost
+
 - name: Embed ignition config into ISO using coreos-installer (via Podman)
   ansible.builtin.shell:
     cmd: >
       podman run --privileged --pull newer --rm
       -v /dev:/dev -v /run/udev:/run/udev -v {{ project_build_dir }}/{{ project_name }}:/data
       -w /data quay.io/coreos/coreos-installer:release
-      iso ignition embed -fi /data/bootstrap-in-place-for-live-iso.ign /data/{{ project_iso_image }}
+      iso ignition embed -fi /data/sno-final-config.ign /data/{{ project_iso_image }}
   register: embed_result
   become: true
   changed_when: embed_result.rc != 0
@@ -205,6 +354,7 @@
   delay: 30
   until: image_upload_result.rc == 0
   failed_when: image_upload_result.rc != 0
+  changed_when: image_upload_result.rc == 0
   when: existing_image_info.rc != 0
 
 - name: Display image upload success message
