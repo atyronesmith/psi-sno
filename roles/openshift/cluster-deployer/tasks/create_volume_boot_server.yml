@@ -1,0 +1,81 @@
+---
+- name: "Get sno port information"
+  openstack.cloud.port_info:
+    name: "{{ project_name }}"
+  register: sno_port_result
+
+- name: "Get OS port information"
+  openstack.cloud.port_info:
+    name: "{{ project_name }}-os"
+  register: os_port_result
+
+- name: Fail if either port is not defined
+  ansible.builtin.fail:
+    msg: "Either the SNO port or OS port is missing. Please check the configuration."
+  when: sno_port_result.ports is not defined or sno_port_result.ports | length != 1 or
+        os_port_result.ports is not defined or os_port_result.ports | length != 1
+
+- name: Check if bootable volume {{ project_name }} exists # noqa: name[template]
+  openstack.cloud.volume_info:
+    name: "{{ project_name }}"
+  register: existing_volume_result
+
+- name: Fail if bootable volume does not exist
+  ansible.builtin.fail:
+    msg: "Volume '{{ project_name }}' does not exist. Please create it first."
+  when: existing_volume_result.volumes is not defined or existing_volume_result.volumes | length != 1
+
+- name: Check if volume is bootable
+  ansible.builtin.set_fact:
+    volume_is_bootable: "{{ existing_volume_result.volumes[0].bootable | default(false) | bool }}"
+    volume_size: "{{ existing_volume_result.volumes[0].size }}"
+
+- name: Display volume bootable status
+  ansible.builtin.debug:
+    msg:
+      - "Volume '{{ project_name }}' bootable status: {{ volume_is_bootable }}"
+      - "Volume ID: {{ existing_volume_result.volumes[0].id }}"
+      - "Volume Size: {{ volume_size }}GB"
+
+- name: Make volume bootable if it's not already bootable
+  openstack.cloud.volume:
+    name: "{{ project_name }}"
+    size: "{{ volume_size }}"
+    bootable: true
+    state: present
+  register: volume_update_result
+  when: not volume_is_bootable
+
+- name: Display volume bootable update result
+  ansible.builtin.debug:
+    msg: "✅ Volume '{{ project_name }}' has been made bootable."
+  when: not volume_is_bootable and volume_update_result is succeeded
+
+- name: Ensure server {{ project_name }} exists (boot from volume) # noqa: name[template]
+  openstack.cloud.server:
+    name: "{{ project_name }}"
+    auto_ip: false
+    state: present
+    boot_volume: "{{ project_name }}"  # Boot from this volume instead of an image
+    flavor: "{{ sno_flavor }}"
+    nics:
+      - port-id: "{{ sno_port_result.ports[0].id }}" # Attach the pre-created port
+      - port-id: "{{ os_port_result.ports[0].id }}" # Attach the pre-created OS port
+    security_groups: # Explicitly associate security group with server
+      - "{{ psi_sno_sg_sno }}"
+      - "{{ psi_sno_sg_openstack }}"
+      - default
+    # key_name: "your-ssh-key-name" # Optional: if you want to inject an SSH key
+    # user_data: "{{ lookup('file', 'cloud-init-config.yaml') }}" # Optional: for cloud-init
+    wait: true # Wait for the server to become active
+    timeout: 600 # Timeout for waiting (adjust as needed)
+  register: server_result
+
+- name: Display Server Information (Volume Boot)
+  ansible.builtin.debug:
+    msg: >
+      Server {{ server_result.server.name | default('N/A') }} is active (booted from volume '{{ project_name }}').
+      Instance ID: {{ server_result.server.id | default('N/A') }}.
+      Fixed IP: {{ project_instance_ip }}.
+      Volume bootable status: {{ volume_is_bootable | default('checked') }}.
+  when: server_result.server is defined

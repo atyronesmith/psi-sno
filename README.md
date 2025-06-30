@@ -11,10 +11,9 @@ Automated deployment of Single-Node OpenShift (SNO) clusters with Red Hat OpenSt
 git clone <repository-url> psi-sno
 cd psi-sno
 
-# 2. Setup Python virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
+# 2. Setup environment (REQUIRED)
+source ~/psi/bin/activate    # Activate Python virtual environment
+export OS_CLOUD=psi          # Set OpenStack cloud environment
 
 # 3. Install dependencies
 make install-deps
@@ -24,12 +23,11 @@ cp secrets/pull-secret.txt.example secrets/pull-secret.txt
 cp secrets/ssh-key.pub.example secrets/ssh-key.pub
 # Edit files with your actual secrets
 
-# 5. Source OpenStack credentials
-#source ~/psi-openrc.sh
-This repo assumes a cloud.yaml exists and that OS_CLOUD is set to the PSI cloud
+# 5. Verify environment
+openstack server list  # Test connectivity
 
-# 6. Deploy to PSI environment
-make deploy-psi
+# 6. Deploy to PSI environment (with project bypass)
+make deploy-psi PROJECT=my-cluster
 ```
 
 ## 📁 Repository Structure
@@ -176,14 +174,80 @@ openstack server list
 
 ## 🎯 Usage
 
+### 🚀 Quick Reference (Most Common Commands)
+
+```bash
+# Environment setup (REQUIRED FIRST)
+source ~/psi/bin/activate && export OS_CLOUD=psi
+
+# Deploy with project bypass (recommended)
+make deploy-psi PROJECT=my-cluster
+
+# Create server from existing volume
+make boot-sno PROJECT=my-cluster      # or just: make boot-sno (interactive)
+
+# Clean up networks and routers
+./scripts/manage-psi.sh clean-networks -y
+./scripts/manage-psi.sh clean-routers -y
+
+# Delete project (various modes)
+make delete-project                    # Interactive
+make delete-project-y                  # Skip confirmation
+make delete-project-name PROJECT=name  # Target specific project
+
+# Check what's available
+make help  # Full list of commands
+```
+
 ### Environment Management
 
 Deploy to different environments using environment-specific inventories:
 
 ```bash
-# PSI environment
+# PSI environment (interactive project selection)
 make deploy-psi
-ansible-playbook -i inventory/environments/psi playbooks/deploy.yml
+
+# PSI environment (bypass interactive selection)
+make deploy-psi PROJECT=my-cluster-name
+
+# Using Ansible directly with project bypass
+ansible-playbook -i inventory/environments/psi playbooks/deploy.yml -e project_name=my-cluster
+```
+
+### Server Management
+
+```bash
+# Create server that boots from existing volume (auto-makes bootable)
+make boot-sno PROJECT=my-cluster      # Non-interactive with specific project
+make boot-sno                         # Interactive project selection
+
+# Using Ansible directly
+ansible-playbook playbooks/create-volume-boot-server.yml -e project_name=my-cluster
+ansible-playbook playbooks/create-volume-boot-server.yml  # Interactive selection
+```
+
+### Network and Router Management
+
+Use the enhanced PSI management script:
+
+```bash
+# List PSI networks
+./scripts/manage-psi.sh list-networks
+
+# Clean orphaned networks (interactive)
+./scripts/manage-psi.sh clean-networks
+
+# Clean orphaned networks (auto-confirm)
+./scripts/manage-psi.sh clean-networks -y
+
+# List PSI routers
+./scripts/manage-psi.sh list-routers
+
+# Clean orphaned routers (interactive)
+./scripts/manage-psi.sh clean-routers
+
+# Clean orphaned routers (auto-confirm)
+./scripts/manage-psi.sh clean-routers -y
 ```
 
 ### Common Operations
@@ -206,10 +270,6 @@ ansible-playbook playbooks/maintenance/stop-cluster.yml
 # Destroy environment
 make destroy-psi
 ansible-playbook playbooks/destroy.yml
-
-# Clean up project directories
-make delete-project
-ansible-playbook playbooks/delete-project.yml
 ```
 
 ### Development Workflow
@@ -245,21 +305,30 @@ The system creates project directories in `build/projects/` for each deployment.
 # List current projects
 ls -la build/projects/
 
-# Interactively delete a project
+# Interactive project deletion (choose project + confirm)
 make delete-project
 
-# Clean all build artifacts (including projects)
-make clean
+# Interactive project selection, skip confirmation
+make delete-project-y
+
+# Delete specific project by name (no prompts)
+make delete-project-name PROJECT=my-cluster
+
+# Using Ansible directly
+ansible-playbook playbooks/delete-project.yml
+ansible-playbook playbooks/delete-project.yml -e auto_confirm=true
+ansible-playbook playbooks/delete-project.yml -e auto_confirm=true -e target_project=my-cluster
 ```
 
-**Interactive Project Deletion Features:**
-- Lists all available project directories with numbered selection
-- Shows project details (size, file count, last modified)
-- Displays project contents summary
-- Requires explicit confirmation before deletion
-- Creates deletion log for audit trail
-- Verifies successful deletion
-- Shows remaining projects after deletion
+**Enhanced Project Deletion Features:**
+- ✅ **Interactive Selection**: Lists all available project directories with numbered selection
+- ✅ **Project Details**: Shows project details (size, file count, last modified)
+- ✅ **Content Summary**: Displays project contents summary
+- ✅ **Auto-Confirm Modes**: Skip confirmation prompts with `-y` variants
+- ✅ **Targeted Deletion**: Delete specific projects by name
+- ✅ **Audit Trail**: Creates deletion log for audit trail
+- ✅ **Verification**: Verifies successful deletion and shows remaining projects
+- ✅ **Safety Checks**: Multiple confirmation layers to prevent accidental deletion
 
 ### Virtual Environment Management
 
@@ -405,6 +474,66 @@ cd roles/common && molecule test
 
 ## 🐛 Troubleshooting
 
+### Environment Setup Issues
+
+**Problem**: Commands fail with "command not found" or undefined variables
+**Solution**: Ensure proper environment setup (this is the #1 cause of issues):
+```bash
+# Check virtual environment
+echo $VIRTUAL_ENV  # Should show /home/user/psi
+(psi) should appear in your prompt
+
+# Check OpenStack environment
+echo $OS_CLOUD     # Should show "psi"
+openstack server list  # Should work without errors
+```
+
+### DNS Configuration Issues
+
+**Problem**: `ansible_default_ipv4` undefined during DNS configuration
+**Solution**: The DNS role now includes automatic fact gathering for remote DNS hosts:
+```bash
+# This is handled automatically in the updated DNS role
+# If you encounter issues, check DNS server connectivity:
+ssh fedora@10.0.108.151 "ip route show default"
+```
+
+**Problem**: DNS cluster files not created (`nfv.com.cluster` missing)
+**Solution**: Recent fixes ensure both DNS files are created:
+```bash
+# Verify DNS files were created
+ssh fedora@10.0.108.151 "ls -la /etc/coredns/clusters/ | grep nfv"
+# Should show both nfv.com.cluster and nfv.com.record
+```
+
+### Deployment Issues
+
+**Problem**: Deployment hangs on project selection prompts
+**Solution**: Use PROJECT parameter to bypass interactive selection:
+```bash
+# Instead of this (interactive):
+make deploy-psi
+
+# Use this (non-interactive):
+make deploy-psi PROJECT=my-cluster-name
+```
+
+**Problem**: Volume boot server fails because volume isn't bootable
+**Solution**: The enhanced volume boot task automatically makes volumes bootable:
+```bash
+# This now happens automatically in create_volume_boot_server task
+# Check volume bootable status:
+openstack volume show my-volume -f value -c bootable
+```
+
+### Variable Name Issues
+
+**Problem**: Undefined variables like `project_instance_ip_sno`
+**Solution**: Use correct variable names (fixed in recent updates):
+- ✅ `project_instance_ip` (for SNO network IP)
+- ✅ `project_instance_ip_os` (for OpenStack network IP)
+- ✅ `project_fip` (for floating IP)
+
 ### Common Issues
 
 **Bootstrap Timeout:**
@@ -548,10 +677,64 @@ When reporting issues, include:
 
 ## 📊 Project Status
 
+### ✅ Recent Improvements (Latest Updates)
+
+- ✅ **DNS Configuration Fixes**: Resolved `ansible_default_ipv4` undefined errors with automatic fact gathering
+- ✅ **Volume Boot Server**: New functionality to create servers that boot from existing volumes (auto-bootable)
+- ✅ **Enhanced Project Management**: Multiple delete modes with auto-confirm and targeted deletion
+- ✅ **PROJECT Parameter Support**: Bypass interactive prompts with `PROJECT=name` parameter
+- ✅ **Network/Router Management**: Enhanced `manage-psi.sh` script for infrastructure cleanup
+- ✅ **Environment Setup Documentation**: Comprehensive setup guide with troubleshooting
+- ✅ **Automated Fixes**: Volume bootable status automatically corrected when needed
+- ✅ **Variable Name Consistency**: Fixed undefined variable issues in deployment summaries
+
+### ✅ Core Functionality Status
+
 - ✅ Repository restructuring complete
 - ✅ Ansible lint compliance
 - ✅ CI/CD pipeline setup
 - ✅ Environment separation
 - ✅ Documentation updates
+- ✅ DNS role enhancements
+- ✅ Server management automation
+- ✅ Interactive and non-interactive deployment modes
 - 🔄 Additional testing and validation
 - 📋 Advanced features and integrations
+
+## ⚡ Environment Setup (CRITICAL)
+
+**Before running ANY commands, you MUST set up your environment:**
+
+```bash
+# 1. Activate Python virtual environment
+source ~/psi/bin/activate
+
+# 2. Set OpenStack cloud environment
+export OS_CLOUD=psi
+
+# 3. Enable bash tab completion (optional but recommended)
+source completion.bash
+
+# 4. Verify setup
+which python     # Should show virtual environment path
+which ansible    # Should show virtual environment path
+openstack server list  # Should list your servers
+```
+
+**Visual confirmation:** Your prompt should show `(psi)` when the virtual environment is active.
+
+### 🚀 Tab Completion Features
+
+After sourcing `completion.bash`, you get smart tab completion:
+
+```bash
+# Tab completion for make targets
+make <TAB><TAB>         # Shows all available targets
+
+# Smart PROJECT parameter completion
+make deploy-psi P<TAB>  # Completes to PROJECT=
+make boot-sno PROJECT=<TAB>  # Shows available projects from build/projects/
+
+# Quick reference command
+show_make_targets       # Lists all targets organized by category
+```

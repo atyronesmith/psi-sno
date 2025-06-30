@@ -1,0 +1,46 @@
+---
+- name: Create Server that Boots from Volume
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars_files:
+    - ../inventory/group_vars/all.yml
+
+  pre_tasks:
+    - name: Display configuration (when project specified)
+      ansible.builtin.debug:
+        msg:
+          - "Creating server that boots from volume: {{ project_name }}"
+          - "Server will boot from existing volume: {{ project_name }}"
+          - "Volume will be automatically made bootable if needed"
+          - "Flavor: {{ sno_flavor }}"
+      when: project_name is defined
+
+  tasks:
+    - name: Read project metadata using iso-builder role
+      ansible.builtin.include_role:
+        name: openshift/iso-builder
+        tasks_from: read_metadata
+
+    - name: Display configuration (after project selection)
+      ansible.builtin.debug:
+        msg:
+          - "Creating server that boots from volume: {{ project_name }}"
+          - "Server will boot from existing volume: {{ project_name }}"
+          - "Volume will be automatically made bootable if needed"
+          - "Flavor: {{ sno_flavor }}"
+      when: project_name is defined
+
+    - name: Create server that boots from volume (with bootable check)
+      ansible.builtin.include_role:
+        name: openshift/cluster-deployer
+        tasks_from: create_volume_boot_server
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg:
+          - "✅ Server creation completed successfully!"
+          - "Server Name: {{ project_name }}"
+          - "Boot Source: Volume '{{ project_name }}' (bootable: verified/fixed)"
+          - "Instance IP: {{ project_instance_ip }}"
