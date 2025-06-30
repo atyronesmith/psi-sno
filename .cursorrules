@@ -53,6 +53,9 @@ make stop-psi                # Stop the PSI cluster
 make health-check-psi        # Run health checks
 make info-psi                # Get cluster information
 
+# Server management
+make boot-sno [PROJECT=name] # Create server that boots from existing volume (interactive if no PROJECT)
+
 # Development tools
 make lint                    # Run ansible-lint and yamllint
 make syntax-check            # Run syntax checks
@@ -70,6 +73,9 @@ ansible-playbook -i inventory/environments/psi playbooks/deploy.yml -e project_n
 
 # Create ISO
 ansible-playbook -i inventory/environments/psi playbooks/create-iso.yml
+
+# Create server that boots from volume
+ansible-playbook playbooks/create-volume-boot-server.yml -e project_name=psi-example
 
 # Maintenance tasks
 ansible-playbook -i inventory/environments/psi playbooks/maintenance/start-cluster.yml
@@ -127,6 +133,18 @@ when:
   - not server_reset_result.failed | default(false)
 ```
 
+#### Volume Boot Server Creation Failures
+**Problem**: `boot_from_volume is True but all of the following are missing: volume_size, image`
+**Solution**: Use `boot_volume` parameter instead of `volume` when booting from existing volumes:
+```yaml
+# ❌ Wrong - causes parameter errors:
+boot_from_volume: true
+volume: "{{ project_name }}"
+
+# ✅ Correct - works with existing volumes:
+boot_volume: "{{ project_name }}"
+```
+
 ### Successful Deployment Indicators
 A successful deployment will show:
 - Environment variables properly set (`(psi)` prompt visible)
@@ -153,4 +171,5 @@ A successful deployment will show:
 - Enhanced Makefile to support PROJECT parameter for non-interactive deployment
 - Fixed variable naming inconsistencies in final configuration summary
 - Improved conditional logic for action server tasks
+- Fixed volume boot server creation: use `boot_volume` parameter instead of `volume`
 - Documented complete working deployment workflow

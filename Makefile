@@ -1,35 +1,42 @@
-.PHONY: help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv download-iso create-iso create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi deploy-psi destroy-psi health-check-psi logs-psi backup-psi restore-psi vxlan-create vxlan-delete vxlan-status delete-project delete-project-y delete-project-name
+.PHONY: help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv setup-completion download-iso create-iso create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi deploy-psi destroy-psi health-check-psi logs-psi backup-psi restore-psi vxlan-create vxlan-delete vxlan-status delete-project delete-project-y delete-project-name boot-sno
 
 help:
 	@echo "Available targets:"
 	@echo "  help           - Show this help message"
-	@echo "  setup-venv     - Create and setup Python virtual environment"
-	@echo "  activate-venv  - Show command to activate virtual environment"
-	@echo "  lint           - Run ansible-lint and yamllint"
-	@echo "  lint-fix       - Run ansible-lint with auto-fix where possible"
-	@echo "  syntax-check   - Run ansible syntax check on all playbooks"
-	@echo "  test           - Run all tests (lint + syntax)"
-	@echo "  install-deps   - Install required dependencies"
-	@echo "  clean          - Clean build artifacts"
-	@echo "  download-iso   - Download the RHCOS ISO using the iso-builder role"
-	@echo "  create-iso     - Create ISO using the iso-builder role (generic)"
-	@echo "  delete-project      - Interactively delete a project from build/projects/"
-	@echo "  delete-project-y    - Select project interactively, skip confirmation prompt"
-	@echo "  delete-project-name - Delete specific project: make delete-project-name PROJECT=name"
 	@echo ""
-	@echo "Environment targets:"
+	@echo "Development tools:"
+	@echo "  setup-venv     - Create and setup Python virtual environment"
+	@echo "  activate-venv  - Show instructions to activate virtual environment"
+	@echo "  setup-completion - Add bash tab completion to ~/.bashrc"
+	@echo "  install-deps   - Install project dependencies"
+	@echo "  lint           - Run ansible-lint and yamllint"
+	@echo "  lint-fix       - Run ansible-lint with auto-fix"
+	@echo "  syntax-check   - Run syntax check on all playbooks"
+	@echo "  test           - Run all tests (lint + syntax + molecule)"
+	@echo "  clean          - Clean build artifacts and temporary files"
+	@echo ""
+	@echo "PSI Environment:"
 	@echo "  deploy-psi     - Deploy to PSI environment"
+	@echo "  deploy-psi PROJECT=name - Deploy specific project (bypasses interactive selection)"
 	@echo "  destroy-psi    - Destroy PSI environment"
 	@echo "  create-iso-psi - Create ISO for PSI environment"
-	@echo "  bootstrap-psi  - Wait for OpenShift bootstrap completion in PSI"
-	@echo "  validate-psi   - Run a dry-run deploy with check and diff"
-	@echo "  info-psi       - Get cluster info for PSI environment"
-	@echo "  start-psi      - Start the PSI cluster"
-	@echo "  stop-psi       - Stop the PSI cluster"
+	@echo "  bootstrap-psi  - Wait for OpenShift bootstrap completion"
+	@echo "  validate-psi   - Run validation checks on PSI environment"
+	@echo "  info-psi       - Get cluster information"
+	@echo "  start-psi      - Start PSI cluster"
+	@echo "  stop-psi       - Stop PSI cluster"
 	@echo "  health-check-psi - Run health checks on PSI cluster"
 	@echo "  logs-psi       - Collect logs from PSI environment"
 	@echo "  backup-psi     - Backup PSI cluster configuration"
 	@echo "  restore-psi    - Restore PSI cluster from backup"
+	@echo ""
+	@echo "Server Management:"
+	@echo "  boot-sno [PROJECT=name] - Create server that boots from existing volume (interactive if no PROJECT)"
+	@echo ""
+	@echo "Project Management:"
+	@echo "  delete-project      - Interactively delete a project from build/projects/"
+	@echo "  delete-project-y    - Select project interactively, skip confirmation prompt"
+	@echo "  delete-project-name - Delete specific project: make delete-project-name PROJECT=name"
 	@echo ""
 	@echo "VXLAN management:"
 	@echo "  vxlan-create   - Create VXLAN endpoint for internalapi network"
@@ -58,6 +65,21 @@ activate-venv:
 	@echo ""
 	@echo "To deactivate when done:"
 	@echo "  deactivate"
+
+setup-completion:
+	@echo "Setting up bash completion for make targets..."
+	@if [ -f "completion.bash" ]; then \
+		echo "Adding completion.bash to your ~/.bashrc"; \
+		echo "" >> ~/.bashrc; \
+		echo "# PSI-SNO Makefile completion" >> ~/.bashrc; \
+		echo "if [ -f \"$(PWD)/completion.bash\" ]; then" >> ~/.bashrc; \
+		echo "    source \"$(PWD)/completion.bash\"" >> ~/.bashrc; \
+		echo "fi" >> ~/.bashrc; \
+		echo "✅ Completion setup added to ~/.bashrc"; \
+		echo "Run 'source ~/.bashrc' or start a new terminal to activate"; \
+	else \
+		echo "❌ completion.bash not found"; \
+	fi
 
 install-deps:
 	@echo "Installing dependencies..."
@@ -228,3 +250,14 @@ delete-project-name:
 	fi
 	@echo "Deleting project '$(PROJECT)' with auto-confirmation..."
 	ansible-playbook playbooks/delete-project.yml -e auto_confirm=true -e target_project="$(PROJECT)"
+
+# Usage: make boot-sno [PROJECT=myproject]
+boot-sno:
+	@echo "Creating server that boots from volume..."
+	@if [ -n "$(PROJECT)" ]; then \
+		echo "Using project: $(PROJECT)"; \
+		ansible-playbook playbooks/create-volume-boot-server.yml -e project_name="$(PROJECT)"; \
+	else \
+		echo "No project specified, will prompt for selection..."; \
+		ansible-playbook playbooks/create-volume-boot-server.yml; \
+	fi
