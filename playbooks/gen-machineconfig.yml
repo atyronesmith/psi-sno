@@ -1,0 +1,11 @@
+---
+- name: Generate Machine Configurations from Butane Templates
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  roles:
+    - role: openshift/iso-builder
+      tags:
+        - machineconfig
+        - gen_machineconfig

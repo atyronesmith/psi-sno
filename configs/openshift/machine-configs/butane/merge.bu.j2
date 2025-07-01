@@ -1,0 +1,14 @@
+# merge.bu
+variant: openshift
+version: 4.18.0
+metadata:
+  name: 99-master-merge-config
+  labels:
+    machineconfiguration.openshift.io/role: master
+ignition:
+  config:
+    merge:
+      - local: bootstrap-in-place-for-live-iso.ign # Merge the bootstrap ignition config
+{% for bu_file in butane_files %}
+      - local: {{ bu_file | regex_replace('\.bu$', '.ign') }}                  # Merge {{ bu_file | regex_replace('\.bu$', '.ign') }}
+{% endfor %}

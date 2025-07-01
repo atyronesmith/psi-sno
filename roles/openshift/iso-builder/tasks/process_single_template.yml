@@ -1,0 +1,68 @@
+---
+# Process a single Butane template file
+# This file is called via include_tasks with a loop
+
+- name: "Set file name variables for {{ template_file.path | basename }}"
+  ansible.builtin.set_fact:
+    butane_file_name: "{{ template_file.path | basename | regex_replace('\\.j2$', '') }}"
+    ignition_file_name: "{{ template_file.path | basename | regex_replace('\\.j2$', '') | regex_replace('\\.bu$', '.ign') }}"
+  delegate_to: localhost
+
+- name: "Generate Butane config from template: {{ template_file.path | basename }}"
+  ansible.builtin.copy:
+    content: "{{ lookup('template', template_file.path) }}"
+    dest: "{{ ignition_output_dir }}/{{ butane_file_name }}"
+    mode: '0644'
+  delegate_to: localhost
+  register: template_generation_result
+  failed_when: false
+
+- name: "Convert Butane config to Ignition: {{ template_file.path | basename }}"
+  ansible.builtin.shell: |
+    {{ butane_executable }} --pretty --strict \
+      "{{ ignition_output_dir }}/{{ butane_file_name }}" \
+      > "{{ ignition_output_dir }}/{{ ignition_file_name }}"
+  delegate_to: localhost
+  register: butane_conversion_result
+  changed_when: true
+  failed_when: false
+  when: template_generation_result is succeeded
+
+# - name: "Clean up intermediate Butane file: {{ template_file.path | basename }}"
+#   ansible.builtin.file:
+#     path: "{{ ignition_output_dir }}/{{ butane_file_name }}"
+#     state: absent
+#   delegate_to: localhost
+#   when:
+#     - template_generation_result is succeeded
+#     - butane_conversion_result is succeeded
+#   failed_when: false
+
+- name: "Debug: Conversion successful for {{ template_file.path | basename }}"
+  ansible.builtin.debug:
+    msg: "Successfully converted {{ template_file.path | basename }} to Ignition config: {{ ignition_file_name }}"
+  when:
+    - ansible_verbosity > 0
+    - template_generation_result is succeeded
+    - butane_conversion_result is succeeded
+  delegate_to: localhost
+
+- name: "Debug: Conversion failed for {{ template_file.path | basename }}"
+  ansible.builtin.debug:
+    msg: |
+      Failed to convert {{ template_file.path | basename }}:
+      Template generation: {{ 'FAILED' if template_generation_result is failed else 'SUCCESS' }}
+      Butane conversion: {{ 'FAILED' if butane_conversion_result is failed else 'SUCCESS' if butane_conversion_result is succeeded else 'SKIPPED' }}
+      Error: {{ template_generation_result.msg | default(butane_conversion_result.msg) | default('Unknown error') }}
+  when:
+    - template_generation_result is failed or butane_conversion_result is failed
+  delegate_to: localhost
+
+- name: "Clean up failed intermediate file"
+  ansible.builtin.file:
+    path: "{{ ignition_output_dir }}/{{ butane_file_name }}"
+    state: absent
+  delegate_to: localhost
+  when:
+    - template_generation_result is failed or butane_conversion_result is failed
+  failed_when: false

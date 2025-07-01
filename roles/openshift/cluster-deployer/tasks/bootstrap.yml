@@ -15,7 +15,7 @@
   when: not dir_status.stat.exists or not dir_status.stat.isdir
 
 - name: Wait for the OpenShift bootstrap to complete
-  ansible.builtin.command: "openshift-install wait-for bootstrap-complete --log-level=debug"
+  ansible.builtin.command: "openshift-install wait-for install-complete --log-level=debug"
   args:
     chdir: "{{ metadata_location }}"
   register: bootstrap_status
