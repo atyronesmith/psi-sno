@@ -1,0 +1,32 @@
+# PSI-SNO OpenShift Deployment Project - Cursor Rules
+
+## OpenShift Command Execution
+
+**CRITICAL**: To run OpenShift commands like `oc get pods`, `oc get nodes`, etc., you MUST first set the KUBECONFIG environment variable in the terminal:
+
+```bash
+export KUBECONFIG=/home/nextgen/dev/psi-sno/build/projects/PROJECT/auth/kubeconfig
+```
+
+Where `PROJECT` is the current project name (e.g., `psi-ggjfn`, `psi-example`, etc.).
+
+### Examples:
+```bash
+# Set KUBECONFIG for project psi-ggjfn
+export KUBECONFIG=/home/nextgen/dev/psi-sno/build/projects/psi-ggjfn/auth/kubeconfig
+
+# Now you can run OpenShift commands
+oc get pods
+oc get nodes
+oc get clusterversion
+```
+
+### Finding Your Project Name:
+- Check `build/projects/` directory: `ls build/projects/`
+- Or run a deployment command to see available projects
+
+### Important Notes:
+- Each project has its own kubeconfig file in `build/projects/PROJECT/auth/kubeconfig`
+- The KUBECONFIG must be set in each new terminal session
+- Without setting KUBECONFIG, `oc` commands will fail or connect to wrong cluster
+- Always verify you're connected to the correct cluster: `oc whoami --show-server`
