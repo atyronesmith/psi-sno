@@ -1,0 +1,37 @@
+---
+# Validate RHOSO deployment
+
+- name: Check OpenStack Control Plane status
+  kubernetes.core.k8s_info:
+    api_version: core.openstack.org/v1beta1
+    kind: OpenStackControlPlane
+    name: openstack
+    namespace: "{{ rhoso_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: control_plane_status
+
+- name: Validate control plane is ready
+  ansible.builtin.assert:
+    that:
+      - control_plane_status.resources | length > 0
+      - control_plane_status.resources[0].status.phase is defined
+      - control_plane_status.resources[0].status.phase == "Ready"
+    fail_msg: "OpenStack Control Plane is not ready"
+    success_msg: "OpenStack Control Plane is ready"
+
+- name: Check RHOSO service pods
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ rhoso_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: rhoso_pods
+
+- name: Display pod status summary
+  ansible.builtin.debug:
+    msg:
+      - "=== RHOSO Deployment Validation ==="
+      - "✅ Control Plane Status: {{ control_plane_status.resources[0].status.phase | default('Unknown') }}"
+      - "✅ Total Pods: {{ rhoso_pods.resources | length }}"
+      - "✅ Running Pods: {{ rhoso_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length }}"
+      - "✅ RHOSO deployment validation complete"

@@ -1,0 +1,33 @@
+---
+- name: Deploy RHOSO Control Plane on OpenShift
+  hosts: localhost
+  gather_facts: true
+  vars_files:
+    - ../common_vars.yml
+  vars:
+    # Override default variables as needed
+    rhoso_version: "18.0"
+    rhoso_namespace: "openstack"
+
+  tasks:
+    - name: Validate environment variables
+      ansible.builtin.assert:
+        that:
+          - project_name is defined
+          - project_name | length > 0
+        fail_msg: "project_name must be defined. Use -e project_name=<project-name>"
+        success_msg: "Project name: {{ project_name }}"
+
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg:
+          - "=== RHOSO Control Plane Deployment ==="
+          - "Project: {{ project_name }}"
+          - "RHOSO Version: {{ rhoso_version }}"
+          - "Target Namespace: {{ rhoso_namespace }}"
+          - "Environment: PSI"
+
+    - name: Deploy RHOSO control plane
+      ansible.builtin.include_role:
+        name: openshift/rhoso-control-plane
+        tasks_from: deploy_control_plane

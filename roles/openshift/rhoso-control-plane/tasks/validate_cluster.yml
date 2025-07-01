@@ -1,0 +1,123 @@
+---
+# Validation tasks for OpenShift cluster readiness
+
+- name: Read project metadata for KUBECONFIG path
+  ansible.builtin.include_role:
+    name: openshift/iso-builder
+    tasks_from: read_metadata
+
+- name: Set KUBECONFIG path based on project metadata location
+  ansible.builtin.set_fact:
+    kubeconfig_path: "{{ metadata_location }}/auth/kubeconfig"
+  when: metadata_location is defined
+
+- name: Check if KUBECONFIG file exists
+  ansible.builtin.stat:
+    path: "{{ kubeconfig_path }}"
+  register: kubeconfig_stat
+  failed_when: not kubeconfig_stat.stat.exists
+
+- name: Validate OpenShift cluster connectivity
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: cluster_nodes
+  failed_when: cluster_nodes.resources | length == 0
+
+- name: Display cluster information
+  ansible.builtin.debug:
+    msg:
+      - "OpenShift cluster validation successful"
+      - "Cluster nodes found: {{ cluster_nodes.resources | length }}"
+      - "Node names: {{ cluster_nodes.resources | map(attribute='metadata.name') | list }}"
+
+- name: Check cluster operator status
+  kubernetes.core.k8s_info:
+    api_version: config.openshift.io/v1
+    kind: ClusterOperator
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: cluster_operators
+
+- name: Validate critical cluster operators are available
+  ansible.builtin.assert:
+    that:
+      - cluster_operators.resources | selectattr('metadata.name', 'equalto', item) | list | length > 0
+      - (cluster_operators.resources | selectattr('metadata.name', 'equalto', item) | first).status.conditions | selectattr('type', 'equalto', 'Available') | selectattr('status', 'equalto', 'True') | list | length > 0
+    fail_msg: "Cluster operator {{ item }} is not available"
+    success_msg: "Cluster operator {{ item }} is available"
+  loop:
+    - authentication
+    - dns
+    - ingress
+    - network
+    - storage
+
+- name: Check available storage classes
+  kubernetes.core.k8s_info:
+    api_version: storage.k8s.io/v1
+    kind: StorageClass
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: storage_classes
+
+- name: Check storage class availability
+  ansible.builtin.debug:
+    msg:
+      - "{% if storage_classes.resources | length > 0 %}✅ Found {{ storage_classes.resources | length }} storage class(es){% else %}⚠️  No storage classes found - some RHOSO services may need persistent storage{% endif %}"
+
+- name: Set storage availability flag
+  ansible.builtin.set_fact:
+    storage_classes_available: "{{ storage_classes.resources | length > 0 }}"
+
+- name: Display available storage classes
+  ansible.builtin.debug:
+    msg: "Available storage classes: {{ storage_classes.resources | map(attribute='metadata.name') | list }}"
+
+- name: Check cluster resource capacity
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: node_resources
+
+- name: Calculate total cluster resources
+  ansible.builtin.set_fact:
+    total_cpu: "{{ node_resources.resources | map(attribute='status.capacity.cpu') | map('int') | sum }}"
+    total_memory_mi: "{{ (node_resources.resources | map(attribute='status.capacity.memory') | map('regex_replace', 'Ki$', '') | map('int') | sum / 1024) | int }}"
+
+- name: Validate cluster has sufficient resources for RHOSO
+  ansible.builtin.assert:
+    that:
+      - total_cpu | int >= 8
+      - total_memory_mi | int >= 16384  # 16GB minimum
+    fail_msg: "Insufficient cluster resources. Need at least 8 CPU cores and 16GB memory. Found: {{ total_cpu }} CPU, {{ total_memory_mi }}MB memory"
+    success_msg: "Cluster has sufficient resources: {{ total_cpu }} CPU cores, {{ total_memory_mi }}MB memory"
+
+- name: Check OpenShift version compatibility
+  kubernetes.core.k8s_info:
+    api_version: config.openshift.io/v1
+    kind: ClusterVersion
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: cluster_version
+
+- name: Display OpenShift version
+  ansible.builtin.debug:
+    msg: "OpenShift cluster version: {{ cluster_version.resources[0].status.desired.version }}"
+
+- name: Validate OpenShift version compatibility with RHOSO
+  ansible.builtin.assert:
+    that: cluster_version.resources[0].status.desired.version is version('4.16.0', '>=')
+    fail_msg: "OpenShift version {{ cluster_version.resources[0].status.desired.version }} is not supported. RHOSO requires OpenShift 4.16.0 or later"
+    success_msg: "OpenShift version {{ cluster_version.resources[0].status.desired.version }} is compatible with RHOSO"
+
+- name: Cluster validation summary
+  ansible.builtin.debug:
+    msg:
+      - "=== OpenShift Cluster Validation Complete ==="
+      - "✅ Cluster connectivity: OK"
+      - "✅ Critical operators: Available"
+      - "✅ Storage classes: {{ storage_classes.resources | length }} found"
+      - "✅ Resources: {{ total_cpu }} CPU, {{ total_memory_mi }}MB memory"
+      - "✅ OpenShift version: {{ cluster_version.resources[0].status.desired.version }}"
+      - "✅ Cluster is ready for RHOSO deployment"
+

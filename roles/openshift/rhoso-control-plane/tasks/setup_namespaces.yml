@@ -1,0 +1,179 @@
+---
+# Setup namespaces and RBAC for RHOSO
+
+- name: Create RHOSO system namespace
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ rhoso_system_namespace }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create RHOSO main namespace
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ rhoso_namespace }}"
+        labels:
+          openstack.org/operator-namespace: "true"
+          pod-security.kubernetes.io/enforce: "restricted"
+          pod-security.kubernetes.io/audit: "restricted"
+          pod-security.kubernetes.io/warn: "restricted"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create cert-manager namespace
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ cert_manager_namespace }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create RHOSO service account
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: "{{ rhoso_service_account }}"
+        namespace: "{{ rhoso_namespace }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create RHOSO cluster role
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: "{{ rhoso_service_account }}-cluster-role"
+      rules:
+        - apiGroups: [""]
+          resources:
+            - "configmaps"
+            - "secrets"
+            - "services"
+            - "persistentvolumeclaims"
+            - "pods"
+          verbs: ["*"]
+        - apiGroups: ["apps"]
+          resources:
+            - "deployments"
+            - "statefulsets"
+          verbs: ["*"]
+        - apiGroups: ["networking.k8s.io"]
+          resources:
+            - "networkpolicies"
+            - "ingresses"
+          verbs: ["*"]
+        - apiGroups: ["route.openshift.io"]
+          resources:
+            - "routes"
+          verbs: ["*"]
+        - apiGroups: ["openstack.org"]
+          resources: ["*"]
+          verbs: ["*"]
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create RHOSO cluster role binding
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: "{{ rhoso_service_account }}-cluster-binding"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: "{{ rhoso_service_account }}-cluster-role"
+      subjects:
+        - kind: ServiceAccount
+          name: "{{ rhoso_service_account }}"
+          namespace: "{{ rhoso_namespace }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Set tenant network config
+  ansible.builtin.set_fact:
+    tenant_net_config:
+      cniVersion: "0.3.1"
+      name: "tenant-net"
+      type: "bridge"
+      bridge: "br-tenant"
+      isGateway: false
+      ipMasq: false
+      hairpinMode: true
+      ipam:
+        type: "host-local"
+        ranges:
+          - - subnet: "{{ openstack_networks.tenant.cidr }}"
+
+- name: Create network attachment definition for tenant networks
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: k8s.cni.cncf.io/v1
+      kind: NetworkAttachmentDefinition
+      metadata:
+        name: tenant-net
+        namespace: "{{ rhoso_namespace }}"
+      spec:
+        config: "{{ tenant_net_config | to_json }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Set storage network config
+  ansible.builtin.set_fact:
+    storage_net_config:
+      cniVersion: "0.3.1"
+      name: "storage-net"
+      type: "bridge"
+      bridge: "br-storage"
+      isGateway: false
+      ipMasq: false
+      hairpinMode: true
+      ipam:
+        type: "host-local"
+        ranges:
+          - - subnet: "{{ openstack_networks.storage.cidr }}"
+
+- name: Create network attachment definition for storage networks
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: k8s.cni.cncf.io/v1
+      kind: NetworkAttachmentDefinition
+      metadata:
+        name: storage-net
+        namespace: "{{ rhoso_namespace }}"
+      spec:
+        config: "{{ storage_net_config | to_json }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Verify namespace creation
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ item }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: namespace_info
+  failed_when: namespace_info.resources | length == 0
+  loop:
+    - "{{ rhoso_system_namespace }}"
+    - "{{ rhoso_namespace }}"
+    - "{{ cert_manager_namespace }}"
+
+- name: Namespace setup summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Namespace and RBAC Setup Complete ==="
+      - "✅ System namespace: {{ rhoso_system_namespace }}"
+      - "✅ Main namespace: {{ rhoso_namespace }}"
+      - "✅ Cert-manager namespace: {{ cert_manager_namespace }}"
+      - "✅ Service account: {{ rhoso_service_account }}"
+      - "✅ Network attachments: tenant-net, storage-net"
+      - "✅ RBAC permissions configured"
+

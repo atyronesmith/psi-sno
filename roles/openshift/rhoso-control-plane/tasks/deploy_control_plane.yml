@@ -1,0 +1,89 @@
+---
+# Main deployment tasks for RHOSO Control Plane
+
+- name: Start RHOSO control plane deployment
+  ansible.builtin.debug:
+    msg:
+      - "Starting RHOSO {{ rhoso_version }} control plane deployment"
+      - "Target namespace: {{ rhoso_namespace }}"
+      - "Project: {{ project_name | default('undefined') }}"
+
+- name: Validate OpenShift cluster readiness
+  ansible.builtin.include_tasks: validate_cluster.yml
+
+- name: Install prerequisite operators
+  ansible.builtin.include_tasks: install_operators.yml
+
+- name: Setup RHOSO namespaces and RBAC
+  ansible.builtin.include_tasks: setup_namespaces.yml
+
+- name: Configure storage for RHOSO services
+  ansible.builtin.include_tasks: configure_storage.yml
+
+- name: Configure networking for RHOSO services
+  ansible.builtin.include_tasks: configure_networking.yml
+
+- name: Deploy RHOSO control plane services
+  ansible.builtin.include_tasks: deploy_services.yml
+
+- name: Configure load balancing
+  ansible.builtin.include_tasks: configure_load_balancer.yml
+
+- name: Validate RHOSO deployment
+  ansible.builtin.include_tasks: validate_deployment.yml
+
+- name: Configure monitoring and alerting
+  ansible.builtin.include_tasks: configure_monitoring.yml
+  when: rhoso_health_check_enabled | default(true)
+
+- name: Display deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "=== RHOSO Control Plane Deployment Complete ==="
+      - "✅ RHOSO version: {{ rhoso_version }}"
+      - "✅ Namespace: {{ rhoso_namespace }}"
+      - "✅ Services deployed: {{ rhoso_control_plane_services | selectattr('enabled') | map(attribute='name') | list | join(', ') }}"
+      - "✅ Storage backend: {{ rhoso_storage_backend }}"
+      - "✅ TLS enabled: {{ rhoso_tls_enabled }}"
+      - "✅ Load balancer configured: {{ load_balancer_ip_range }}"
+      - ""
+      - "Next steps:"
+      - "1. Configure data plane nodes (if applicable)"
+      - "2. Create OpenStack projects and users"
+      - "3. Configure OpenStack networks and resources"
+      - "4. Test OpenStack API endpoints"
+
+- name: Save deployment metadata
+  ansible.builtin.copy:
+    content: |
+      # RHOSO Control Plane Deployment Metadata
+      # Generated: {{ ansible_date_time.iso8601 }}
+
+      deployment:
+        rhoso_version: "{{ rhoso_version }}"
+        openshift_project: "{{ project_name | default('N/A') }}"
+        namespace: "{{ rhoso_namespace }}"
+        deployment_date: "{{ ansible_date_time.iso8601 }}"
+
+      services:
+      {% for service in rhoso_control_plane_services %}
+      {% if service.enabled %}
+        - name: "{{ service.name }}"
+          replicas: {{ service.replicas }}
+          enabled: true
+      {% endif %}
+      {% endfor %}
+
+      configuration:
+        storage_backend: "{{ rhoso_storage_backend }}"
+        tls_enabled: {{ rhoso_tls_enabled }}
+        load_balancer_range: "{{ load_balancer_ip_range }}"
+
+      endpoints:
+        # Will be populated after service discovery
+        keystone_url: "https://keystone-{{ rhoso_namespace }}.apps.{{ cluster_domain | default('example.com') }}"
+        horizon_url: "https://horizon-{{ rhoso_namespace }}.apps.{{ cluster_domain | default('example.com') }}"
+    dest: "{{ project_build_dir }}/{{ project_name | default('rhoso') }}/rhoso-deployment-metadata.yml"
+    mode: '0644'
+  delegate_to: localhost
+

@@ -1,0 +1,52 @@
+---
+# Deploy RHOSO control plane services
+
+- name: Create OpenStack secret for RHOSO services
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: osp-secret
+        namespace: "{{ rhoso_namespace }}"
+      type: Opaque
+      data:
+        # Base64 encoded placeholder passwords - should be replaced with real secrets
+        AdminPassword: "{{ 'admin123' | b64encode }}"
+        DatabasePassword: "{{ 'database123' | b64encode }}"
+        RabbitPassword: "{{ 'rabbit123' | b64encode }}"
+        ServicePassword: "{{ 'service123' | b64encode }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Deploy OpenStack Control Plane
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'openstack-control-plane.yaml.j2') | from_yaml }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: "{{ rhoso_deployment_timeout }}"
+
+- name: Wait for RHOSO services to be ready
+  kubernetes.core.k8s_info:
+    api_version: core.openstack.org/v1beta1
+    kind: OpenStackControlPlane
+    name: openstack
+    namespace: "{{ rhoso_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: "{{ rhoso_deployment_timeout }}"
+  register: control_plane_status
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg:
+      - "=== RHOSO Services Deployment Complete ==="
+      - "✅ OpenStack Control Plane: {{ control_plane_status.resources[0].status.phase | default('Unknown') }}"
+      - "✅ Services deployed and ready"
