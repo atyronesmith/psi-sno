@@ -1,0 +1,80 @@
+---
+# Generate Ignition Configs from Butane Templates
+
+- name: "Check if butane executable is available"
+  ansible.builtin.command: which {{ butane_executable }}
+  register: butane_check
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: "Fail if butane executable is not found"
+  ansible.builtin.fail:
+    msg: |
+      Butane executable '{{ butane_executable }}' not found in PATH.
+
+      To install butane, you can:
+      1. Download from GitHub releases: https://github.com/coreos/butane/releases
+      2. Install via package manager (if available)
+      3. Build from source: https://github.com/coreos/butane
+
+      For RHEL/CentOS, you might find it in the openshift repositories.
+
+      Example installation:
+      sudo wget -O /usr/local/bin/butane https://github.com/coreos/butane/releases/download/v0.19.0/butane-x86_64-unknown-linux-gnu
+      sudo chmod +x /usr/local/bin/butane
+  when: butane_check.rc != 0
+  delegate_to: localhost
+  run_once: true
+
+- name: "Ensure the output directory exists '{{ ignition_output_dir }}'"
+  ansible.builtin.file:
+    path: "{{ ignition_output_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: "Find all Butane template files (.j2) in '{{ butane_templates_dir }}'"
+  ansible.builtin.find:
+    paths: "{{ butane_templates_dir }}"
+    patterns: "*.j2" # Finds files like *.bu.j2, *.fcos.j2, etc.
+    # Use patterns: "*.bu.j2" if you only want to match .bu.j2 files
+  register: butane_template_files
+  delegate_to: localhost
+  run_once: true
+
+- name: "Debug: Show found template files"
+  ansible.builtin.debug:
+    var: butane_template_files.files
+  when: ansible_verbosity > 0 # Show only in verbose mode
+  delegate_to: localhost
+  run_once: true
+
+- name: "Filter out merge templates from individual processing"
+  ansible.builtin.set_fact:
+    individual_templates: "{{ butane_template_files.files | rejectattr('path', 'match', '.*merge\\.bu\\.j2$') | list }}"
+  when: butane_template_files.files | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: "Process each Butane template (excluding merge templates)"
+  ansible.builtin.include_tasks: process_single_template.yml
+  loop: "{{ individual_templates | default([]) }}"
+  loop_control:
+    loop_var: template_file
+  when: individual_templates | default([]) | length > 0
+
+- name: "No Butane templates found to process"
+  ansible.builtin.debug:
+    msg: "No *.j2 template files found in '{{ butane_templates_dir }}'. Nothing to do."
+  when: butane_template_files.files | length == 0
+  delegate_to: localhost
+  run_once: true
+
+- name: "Summary: Ignition file generation process complete"
+  ansible.builtin.debug:
+    msg: "Ignition file generation process finished. Check the '{{ ignition_output_dir }}' directory for generated .ign files."
+  delegate_to: localhost
+  run_once: true

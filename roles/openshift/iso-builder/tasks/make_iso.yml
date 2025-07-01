@@ -267,7 +267,7 @@
 - name: Generate final ignition config from merge.bu using butane
   ansible.builtin.shell:
     cmd: >
-      {{ butane_executable | default('butane') }} --pretty --strict --files-dir "{{ metadata_location }}"
+      {{ butane_executable | default('butane') }} --raw --pretty --strict --files-dir "{{ metadata_location }}"
       "{{ metadata_location }}/merge.bu"
       > "{{ metadata_location }}/sno-final-config.ign"
     creates: "{{ metadata_location }}/sno-final-config.ign"

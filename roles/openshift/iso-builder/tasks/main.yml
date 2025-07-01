@@ -1,6 +1,23 @@
 ---
 # tasks file for openshift/iso-builder
+
+- name: "Include and run tasks from gen_machineconfig.yml"
+  ansible.builtin.include_tasks: gen_machineconfig.yml
+  tags:
+    - machineconfig
+    - gen_machineconfig
+  when: >
+    'machineconfig' in ansible_run_tags or
+    'gen_machineconfig' in ansible_run_tags or
+    'all' in ansible_run_tags or
+    ansible_run_tags == ['all']
+
 - name: "Include and run tasks from make_iso.yml"
   ansible.builtin.include_tasks: make_iso.yml
   tags:
     - make_iso
+  when: >
+    'make_iso' in ansible_run_tags or
+    'all' in ansible_run_tags or
+    ansible_run_tags == ['all']
+

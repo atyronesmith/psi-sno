@@ -85,9 +85,12 @@ ansible-playbook -i inventory/environments/psi playbooks/maintenance/start-clust
 - `playbooks/` - Ansible playbooks for various operations
 - `roles/` - Ansible roles organized by function
 - `inventory/environments/psi/` - PSI environment configuration
-- `configs/` - Configuration files including Kubernetes NNCP
+- `configs/` - Configuration files including Kubernetes NNCP and Butane templates
+  - `configs/openshift/machine-configs/butane/` - Butane template files (.bu.j2)
 - `scripts/` - Shell scripts for automation
 - `build/` - Generated artifacts and project directories
+  - `build/projects/` - Individual project artifacts (ISOs, configs, ignition files)
+  - `build/generated/` - Generated Ignition configs from Butane templates
 
 ## Important Notes
 - Always ensure the virtual environment is activated before running commands
@@ -95,6 +98,33 @@ ansible-playbook -i inventory/environments/psi playbooks/maintenance/start-clust
 - Use `make help` to see all available Makefile targets
 - Project artifacts are stored in `build/projects/`
 - Network configurations are defined in `configs/kubernetes/nncp.yaml`
+
+## Butane Template Processing
+
+### Overview
+The project uses Butane templates (`.bu.j2` files) to generate machine configurations that are merged into OpenShift ISOs. The iso-builder role handles this through a two-phase processing workflow.
+
+### Template Locations
+- **Templates**: `configs/openshift/machine-configs/butane/*.bu.j2`
+- **Generated files**: Project directory (`build/projects/{project_name}/`)
+- **Examples**: `90-custom-dns.bu.j2`, `99-master-chrony.bu.j2`, `merge.bu.j2`
+
+### Processing Workflow
+```bash
+# Run ISO creation (includes Butane processing)
+make create-iso
+# Or run just Butane template processing
+ansible-playbook playbooks/gen-machineconfig.yml
+```
+
+**Two-Phase Processing:**
+1. **Regular templates** → Generate individual `.bu` files in project directory
+2. **Merge template** → Combine bootstrap ignition + all `.bu` files into `merge.bu`
+
+### Key Files Generated
+- `90-custom-dns.bu` - DNS configuration for nodes
+- `99-master-chrony.bu` - Time synchronization configuration
+- `merge.bu` - Master file that merges bootstrap ignition with all Butane configs
 
 ## Troubleshooting
 
@@ -145,6 +175,32 @@ volume: "{{ project_name }}"
 boot_volume: "{{ project_name }}"
 ```
 
+#### Butane Template Processing Issues
+**Problem**: `'regular_templates' is undefined` or template processing failures
+**Solutions**:
+- Verify Butane templates exist in `configs/openshift/machine-configs/butane/`
+- Check that `butane` executable is installed and available in PATH
+- Ensure template path is correct: `{{ playbook_dir }}/../configs/openshift/machine-configs/butane`
+- Templates must be named `*.bu.j2` (e.g., `90-custom-dns.bu.j2`)
+
+**Problem**: Template syntax errors or recursive loops in merge templates
+**Solution**: Verify Jinja2 template syntax in `.bu.j2` files:
+```yaml
+# ✅ Correct merge template structure:
+{% for bu_file in butane_files %}
+      - local: {{ bu_file }}
+{% endfor %}
+
+# ❌ Wrong - causes recursion:
+vars:
+  butane_files: "{{ butane_files | default([]) }}"
+```
+
+**Problem**: Generated `.bu` files contain literal `{{ variable_name }}` instead of resolved values
+**Solution**: Ensure variables are defined and accessible when templates are processed:
+- `dns_fip` must be defined for DNS templates
+- `metadata_location` must be set for merge templates
+
 ### Successful Deployment Indicators
 A successful deployment will show:
 - Environment variables properly set (`(psi)` prompt visible)
@@ -173,3 +229,15 @@ A successful deployment will show:
 - Improved conditional logic for action server tasks
 - Fixed volume boot server creation: use `boot_volume` parameter instead of `volume`
 - Documented complete working deployment workflow
+
+### Butane Template Processing Enhancements (Latest)
+- **Enhanced iso-builder role**: Added comprehensive Butane template processing workflow
+- **Merge template functionality**: Implemented `merge.bu.j2` template for combining configurations
+- **Two-phase processing**: Regular templates processed first, then merge templates with dynamic file lists
+- **Path resolution fixes**: Corrected template directory paths (`{{ playbook_dir }}/../configs/openshift/machine-configs/butane`)
+- **Error handling**: Added proper defaults and undefined variable handling for template processing
+- **Template workflow**:
+  1. Process all `.bu.j2` templates except merge templates → generates `.bu` files
+  2. Scan project directory for generated `.bu` files
+  3. Process `merge.bu.j2` with `butane_files` variable containing list of generated files
+  4. Results in `merge.bu` that references bootstrap ignition + all Butane configurations
