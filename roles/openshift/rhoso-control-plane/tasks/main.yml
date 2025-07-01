@@ -1,0 +1,17 @@
+---
+- name: Print usage instructions for this role
+  ansible.builtin.debug:
+    msg: |
+      This role does not execute tasks directly from main.yml.
+      You must use 'tasks_from' and specify the deployment task when including this role.
+      Available tasks:
+        - deploy_control_plane: Deploy RHOSO control plane services
+        - validate_cluster: Validate OpenShift cluster readiness
+        - status_check: Check RHOSO control plane status
+        - cleanup: Remove RHOSO control plane services
+
+      Example:
+        - include_role:
+            name: openshift/rhoso-control-plane
+            tasks_from: deploy_control_plane
+

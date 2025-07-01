@@ -1,0 +1,156 @@
+---
+# Default variables for RHOSO Control Plane deployment
+
+# ============================================================================
+# RHOSO Version Configuration
+# ============================================================================
+rhoso_version: "18.0"
+rhoso_channel: "stable-v1.0"
+
+# ============================================================================
+# Namespace Configuration
+# ============================================================================
+rhoso_namespace: "openstack"
+rhoso_system_namespace: "openstack-system"
+cert_manager_namespace: "cert-manager"
+
+# ============================================================================
+# Operator Configuration
+# ============================================================================
+# RHOSO operator subscription
+rhoso_operator_name: "openstack-operator"
+rhoso_operator_source: "redhat-operators"
+rhoso_operator_source_namespace: "openshift-marketplace"
+
+# Cert-manager operator
+cert_manager_operator_name: "openshift-cert-manager-operator"
+cert_manager_operator_source: "redhat-operators"
+
+# MetalLB operator for load balancing
+metallb_operator_name: "metallb-operator"
+metallb_operator_source: "redhat-operators"
+
+# NMState operator for network configuration
+nmstate_operator_name: "kubernetes-nmstate-operator"
+nmstate_operator_channel: "stable"
+nmstate_operator_source: "redhat-operators"
+nmstate_operator_source_namespace: "openshift-marketplace"
+
+# ============================================================================
+# Control Plane Services Configuration
+# ============================================================================
+# Services to deploy in the control plane
+rhoso_control_plane_services:
+  - name: "keystone"
+    enabled: true
+    replicas: 3
+  - name: "placement"
+    enabled: true
+    replicas: 3
+  - name: "glance"
+    enabled: true
+    replicas: 2
+  - name: "cinder"
+    enabled: true
+    replicas: 3
+  - name: "neutron"
+    enabled: true
+    replicas: 3
+  - name: "nova"
+    enabled: true
+    replicas: 3
+  - name: "heat"
+    enabled: false
+    replicas: 2
+  - name: "horizon"
+    enabled: true
+    replicas: 2
+
+# ============================================================================
+# Storage Configuration
+# ============================================================================
+# Storage backend for RHOSO services
+rhoso_storage_backend: "ceph"
+ceph_namespace: "openshift-storage"
+
+# Persistent Volume sizes
+rhoso_pv_sizes:
+  keystone_db: "10Gi"
+  glance_storage: "100Gi"
+  cinder_db: "20Gi"
+  neutron_db: "10Gi"
+  nova_db: "20Gi"
+
+# ============================================================================
+# Network Configuration
+# ============================================================================
+# OpenStack service networks
+openstack_networks:
+  control_plane:
+    cidr: "172.17.0.0/24"
+    vlan_id: 20
+  storage:
+    cidr: "172.18.0.0/24"
+    vlan_id: 21
+  tenant:
+    cidr: "172.19.0.0/24"
+    vlan_id: 22
+
+# Load balancer configuration
+load_balancer_ip_range: "192.168.200.200-192.168.200.250"
+
+# ============================================================================
+# Security Configuration
+# ============================================================================
+# TLS configuration
+rhoso_tls_enabled: true
+rhoso_ca_issuer: "rhoso-ca-issuer"
+
+# RBAC configuration
+rhoso_service_account: "rhoso-operator"
+
+# ============================================================================
+# Resource Limits
+# ============================================================================
+# Default resource requests and limits for RHOSO services
+rhoso_resource_defaults:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+
+# Service-specific resource overrides
+rhoso_service_resources:
+  keystone:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  nova:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+# ============================================================================
+# Deployment Configuration
+# ============================================================================
+# Timeout settings
+rhoso_deployment_timeout: 1800  # 30 minutes
+rhoso_operator_timeout: 600     # 10 minutes
+rhoso_validation_timeout: 300   # 5 minutes
+
+# Retry settings
+rhoso_retry_count: 3
+rhoso_retry_delay: 30
+
+# Health check configuration
+rhoso_health_check_enabled: true
+rhoso_health_check_interval: 60
+

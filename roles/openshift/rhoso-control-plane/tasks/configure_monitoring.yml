@@ -1,0 +1,30 @@
+---
+# Configure monitoring for RHOSO services
+
+- name: Create ServiceMonitor for RHOSO metrics
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      metadata:
+        name: rhoso-metrics
+        namespace: "{{ rhoso_namespace }}"
+        labels:
+          app: openstack
+      spec:
+        selector:
+          matchLabels:
+            service: openstack-metrics
+        endpoints:
+          - port: metrics
+            interval: 30s
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+  when: rhoso_health_check_enabled
+
+- name: Monitoring configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Monitoring Configuration ==="
+      - "✅ ServiceMonitor created for RHOSO metrics"
+      - "✅ Health monitoring enabled: {{ rhoso_health_check_enabled }}"

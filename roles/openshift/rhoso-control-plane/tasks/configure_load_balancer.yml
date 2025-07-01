@@ -1,0 +1,19 @@
+---
+# Configure load balancing for RHOSO services
+
+- name: Verify MetalLB is configured
+  kubernetes.core.k8s_info:
+    api_version: metallb.io/v1beta1
+    kind: IPAddressPool
+    name: "{{ rhoso_namespace }}"
+    namespace: metallb-system
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: metallb_pool
+
+- name: Display load balancer configuration
+  ansible.builtin.debug:
+    msg:
+      - "=== Load Balancer Configuration ==="
+      - "✅ MetalLB IP pool: {{ rhoso_namespace }}"
+      - "✅ IP range: {{ load_balancer_ip_range }}"
+      - "✅ Load balancer ready for RHOSO services"

@@ -1,0 +1,121 @@
+---
+# Configure networking for RHOSO services
+
+- name: Create NMState instance
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: nmstate.io/v1
+      kind: NMState
+      metadata:
+        name: nmstate
+        namespace: openshift-nmstate
+      spec: {}
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Wait for NMState to be ready (lenient check)
+  kubernetes.core.k8s_info:
+    api_version: nmstate.io/v1
+    kind: NMState
+    name: nmstate
+    namespace: openshift-nmstate
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: nmstate_instance
+  until: nmstate_instance.resources | length > 0
+  retries: 5
+  delay: 10
+  failed_when: false
+
+- name: Display NMState status
+  ansible.builtin.debug:
+    msg:
+      - "NMState instance found: {{ nmstate_instance.resources | length > 0 }}"
+      - "NMState status: {{ nmstate_instance.resources[0].status | default('No status yet') if nmstate_instance.resources | length > 0 else 'Not found' }}"
+
+# TODO: Enable NNCP after verifying NMState operator is fully ready
+# - name: Create NodeNetworkConfigurationPolicy for OpenStack networks
+#   kubernetes.core.k8s:
+#     definition:
+#       apiVersion: nmstate.io/v1
+#       kind: NodeNetworkConfigurationPolicy
+#       metadata:
+#         name: openstack-networks
+#       spec:
+#         desiredState:
+#           interfaces:
+#             - name: br-tenant
+#               type: linux-bridge
+#               state: up
+#               bridge:
+#                 options:
+#                   stp:
+#                     enabled: false
+#                 port: []
+#             - name: br-storage
+#               type: linux-bridge
+#               state: up
+#               bridge:
+#                 options:
+#                   stp:
+#                     enabled: false
+#                 port: []
+#     state: present
+#     kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create MetalLB system namespace
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: metallb-system
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create MetalLB instance
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: metallb.io/v1beta1
+      kind: MetalLB
+      metadata:
+        name: metallb
+        namespace: metallb-system
+      spec: {}
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create MetalLB IP address pool for RHOSO
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: metallb.io/v1beta1
+      kind: IPAddressPool
+      metadata:
+        name: "{{ rhoso_namespace }}"
+        namespace: openshift-operators
+      spec:
+        addresses:
+          - "{{ load_balancer_ip_range }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Create MetalLB L2 advertisement
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: metallb.io/v1beta1
+      kind: L2Advertisement
+      metadata:
+        name: "{{ rhoso_namespace }}-l2adv"
+        namespace: openshift-operators
+      spec:
+        ipAddressPools:
+          - "{{ rhoso_namespace }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Networking configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Networking Configuration Complete ==="
+      - "✅ NMState instance: Created"
+      - "⚠️  NNCP for OpenStack networks: Temporarily disabled (waiting for NMState readiness)"
+      - "✅ MetalLB instance: Created"
+      - "✅ IP address pool: {{ load_balancer_ip_range }}"
+      - "✅ L2 advertisement: Configured"

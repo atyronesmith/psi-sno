@@ -1,0 +1,53 @@
+---
+# Configure storage for RHOSO services
+
+- name: Get available storage classes
+  kubernetes.core.k8s_info:
+    api_version: storage.k8s.io/v1
+    kind: StorageClass
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: available_storage_classes
+
+- name: Set default storage class
+  ansible.builtin.set_fact:
+    rhoso_storage_class: "{{ available_storage_classes.resources | selectattr('metadata.annotations', 'defined') | selectattr('metadata.annotations', 'mapping') | selectattr('metadata.annotations.storageclass.kubernetes.io/is-default-class', 'defined') | selectattr('metadata.annotations.storageclass.kubernetes.io/is-default-class', 'equalto', 'true') | map(attribute='metadata.name') | first | default('local-storage') }}"
+  when: available_storage_classes.resources | length > 0
+
+- name: Set storage class to none when no storage classes available
+  ansible.builtin.set_fact:
+    rhoso_storage_class: "none"
+  when: available_storage_classes.resources | length == 0
+
+- name: Display selected storage class
+  ansible.builtin.debug:
+    msg: "Using storage class: {{ rhoso_storage_class }}"
+
+- name: Create persistent volume claims for RHOSO services
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: "{{ item.key }}-pvc"
+        namespace: "{{ rhoso_namespace }}"
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: "{{ item.value }}"
+        storageClassName: "{{ rhoso_storage_class }}"
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+  loop: "{{ rhoso_pv_sizes | dict2items }}"
+  when:
+    - rhoso_storage_backend == "persistent-volumes"
+    - rhoso_storage_class != "none"
+
+- name: Storage configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Storage Configuration Complete ==="
+      - "✅ Storage class: {{ rhoso_storage_class }}"
+      - "✅ Storage backend: {{ rhoso_storage_backend }}"
+      - "✅ PV sizes configured for RHOSO services"

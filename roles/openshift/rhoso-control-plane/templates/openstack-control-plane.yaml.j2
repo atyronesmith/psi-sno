@@ -1,0 +1,243 @@
+---
+apiVersion: operator.openstack.org/v1beta1
+kind: OpenStack
+metadata:
+  name: openstack
+  namespace: {{ rhoso_namespace }}
+spec:
+  secret: osp-secret
+{% if rhoso_storage_class != "none" %}
+  storageClass: {{ rhoso_storage_class | default('local-storage') }}
+{% endif %}
+
+  # DNS Configuration
+  dns:
+    template:
+      options:
+        - key: server
+          values:
+            - {{ dns_instance_ip | default('8.8.8.8') }}
+      replicas: 1
+
+  # TLS Configuration
+{% if rhoso_tls_enabled %}
+  tls:
+    ingress:
+      enabled: true
+      ca:
+        duration: 87600h0m0s
+        renewBefore: 720h0m0s
+      cert:
+        duration: 43800h0m0s
+        renewBefore: 72h0m0s
+    podLevel:
+      enabled: true
+{% endif %}
+
+  # Keystone Identity Service
+  keystone:
+    enabled: true
+    template:
+      override:
+        service:
+          internal:
+            metadata:
+              annotations:
+                metallb.universe.tf/address-pool: {{ rhoso_namespace }}
+            spec:
+              type: LoadBalancer
+      databaseInstance: openstack
+      secret: osp-secret
+      replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'keystone') | first).replicas | default(3) }}
+      resources:
+        requests:
+          cpu: {{ rhoso_service_resources.keystone.requests.cpu | default(rhoso_resource_defaults.requests.cpu) }}
+          memory: {{ rhoso_service_resources.keystone.requests.memory | default(rhoso_resource_defaults.requests.memory) }}
+        limits:
+          cpu: {{ rhoso_service_resources.keystone.limits.cpu | default(rhoso_resource_defaults.limits.cpu) }}
+          memory: {{ rhoso_service_resources.keystone.limits.memory | default(rhoso_resource_defaults.limits.memory) }}
+
+  # Glance Image Service
+{% if (rhoso_control_plane_services | selectattr('name', 'equalto', 'glance') | first).enabled %}
+  glance:
+    enabled: true
+    template:
+      databaseInstance: openstack
+      replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'glance') | first).replicas | default(2) }}
+{% if rhoso_storage_class != "none" %}
+      storage:
+        storageRequest: {{ rhoso_pv_sizes.glance_storage | default('100Gi') }}
+{% endif %}
+      glanceAPIs:
+        default:
+          replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'glance') | first).replicas | default(2) }}
+          override:
+            service:
+              internal:
+                metadata:
+                  annotations:
+                    metallb.universe.tf/address-pool: {{ rhoso_namespace }}
+                spec:
+                  type: LoadBalancer
+{% endif %}
+
+  # Placement Service
+{% if (rhoso_control_plane_services | selectattr('name', 'equalto', 'placement') | first).enabled %}
+  placement:
+    enabled: true
+    template:
+      databaseInstance: openstack
+      secret: osp-secret
+      replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'placement') | first).replicas | default(3) }}
+{% endif %}
+
+  # Cinder Block Storage Service
+{% if (rhoso_control_plane_services | selectattr('name', 'equalto', 'cinder') | first).enabled %}
+  cinder:
+    enabled: true
+    template:
+      databaseInstance: openstack
+      secret: osp-secret
+      cinderAPI:
+        replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'cinder') | first).replicas | default(3) }}
+        override:
+          service:
+            internal:
+              metadata:
+                annotations:
+                  metallb.universe.tf/address-pool: {{ rhoso_namespace }}
+              spec:
+                type: LoadBalancer
+      cinderScheduler:
+        replicas: 1
+      cinderBackup:
+        replicas: 0  # Disabled by default
+      cinderVolumes:
+        volume1:
+          replicas: 1
+{% endif %}
+
+  # Neutron Networking Service
+{% if (rhoso_control_plane_services | selectattr('name', 'equalto', 'neutron') | first).enabled %}
+  neutron:
+    enabled: true
+    template:
+      databaseInstance: openstack
+      secret: osp-secret
+      override:
+        service:
+          internal:
+            metadata:
+              annotations:
+                metallb.universe.tf/address-pool: {{ rhoso_namespace }}
+            spec:
+              type: LoadBalancer
+      replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'neutron') | first).replicas | default(3) }}
+{% endif %}
+
+  # Nova Compute Service
+{% if (rhoso_control_plane_services | selectattr('name', 'equalto', 'nova') | first).enabled %}
+  nova:
+    enabled: true
+    template:
+      secret: osp-secret
+      apiService:
+        override:
+          service:
+            internal:
+              metadata:
+                annotations:
+                  metallb.universe.tf/address-pool: {{ rhoso_namespace }}
+              spec:
+                type: LoadBalancer
+        replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'nova') | first).replicas | default(3) }}
+      metadataService:
+        override:
+          service:
+            internal:
+              metadata:
+                annotations:
+                  metallb.universe.tf/address-pool: {{ rhoso_namespace }}
+              spec:
+                type: LoadBalancer
+        replicas: 1
+      scheduler:
+        replicas: 1
+      conductor:
+        replicas: 1
+      resources:
+        requests:
+          cpu: {{ rhoso_service_resources.nova.requests.cpu | default(rhoso_resource_defaults.requests.cpu) }}
+          memory: {{ rhoso_service_resources.nova.requests.memory | default(rhoso_resource_defaults.requests.memory) }}
+        limits:
+          cpu: {{ rhoso_service_resources.nova.limits.cpu | default(rhoso_resource_defaults.limits.cpu) }}
+          memory: {{ rhoso_service_resources.nova.limits.memory | default(rhoso_resource_defaults.limits.memory) }}
+{% endif %}
+
+  # Horizon Dashboard
+{% if (rhoso_control_plane_services | selectattr('name', 'equalto', 'horizon') | first).enabled %}
+  horizon:
+    enabled: true
+    template:
+      replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'horizon') | first).replicas | default(2) }}
+      secret: osp-secret
+{% endif %}
+
+  # Heat Orchestration Service (Optional)
+{% if (rhoso_control_plane_services | selectattr('name', 'equalto', 'heat') | first).enabled %}
+  heat:
+    enabled: true
+    template:
+      databaseInstance: openstack
+      secret: osp-secret
+      heatAPI:
+        replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'heat') | first).replicas | default(2) }}
+      heatEngine:
+        replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'heat') | first).replicas | default(2) }}
+{% endif %}
+
+  # MariaDB Database
+  mariadb:
+    enabled: true
+    templates:
+      openstack:
+{% if rhoso_storage_class != "none" %}
+        storageRequest: {{ rhoso_pv_sizes.keystone_db | default('10Gi') }}
+{% endif %}
+        replicas: 3
+        resources:
+          requests:
+            cpu: {{ rhoso_resource_defaults.requests.cpu }}
+            memory: {{ rhoso_resource_defaults.requests.memory }}
+          limits:
+            cpu: {{ rhoso_resource_defaults.limits.cpu }}
+            memory: {{ rhoso_resource_defaults.limits.memory }}
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    enabled: true
+    templates:
+      rabbitmq:
+        replicas: 3
+        resources:
+          requests:
+            cpu: {{ rhoso_resource_defaults.requests.cpu }}
+            memory: {{ rhoso_resource_defaults.requests.memory }}
+          limits:
+            cpu: {{ rhoso_resource_defaults.limits.cpu }}
+            memory: {{ rhoso_resource_defaults.limits.memory }}
+
+  # Memcached Caching Service
+  memcached:
+    enabled: true
+    templates:
+      memcached:
+        replicas: 3
+        resources:
+          requests:
+            cpu: {{ rhoso_resource_defaults.requests.cpu }}
+            memory: {{ rhoso_resource_defaults.requests.memory }}
+          limits:
+            cpu: {{ rhoso_resource_defaults.limits.cpu }}
+            memory: {{ rhoso_resource_defaults.limits.memory }}
+

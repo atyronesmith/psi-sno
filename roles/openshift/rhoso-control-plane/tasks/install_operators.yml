@@ -1,0 +1,149 @@
+---
+# Install prerequisite operators for RHOSO
+
+- name: Create openshift-operators namespace if not exists
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: openshift-operators
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Install OpenShift Cert-Manager Operator
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: "{{ cert_manager_operator_name }}"
+        namespace: openshift-operators
+      spec:
+        channel: "stable-v1"
+        name: "{{ cert_manager_operator_name }}"
+        source: "{{ cert_manager_operator_source }}"
+        sourceNamespace: "{{ rhoso_operator_source_namespace }}"
+        installPlanApproval: Automatic
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Wait for Cert-Manager Operator to be ready
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: Subscription
+    name: "{{ cert_manager_operator_name }}"
+    namespace: openshift-operators
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: cert_manager_subscription
+  until: cert_manager_subscription.resources[0].status.state is defined and cert_manager_subscription.resources[0].status.state == "AtLatestKnown"
+  retries: 10
+  delay: 30
+
+- name: Install MetalLB Operator
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: "{{ metallb_operator_name }}"
+        namespace: openshift-operators
+      spec:
+        channel: "stable"
+        name: "{{ metallb_operator_name }}"
+        source: "{{ metallb_operator_source }}"
+        sourceNamespace: "{{ rhoso_operator_source_namespace }}"
+        installPlanApproval: Automatic
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Wait for MetalLB Operator to be ready
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: Subscription
+    name: "{{ metallb_operator_name }}"
+    namespace: openshift-operators
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: metallb_subscription
+  until: metallb_subscription.resources[0].status.state is defined and metallb_subscription.resources[0].status.state == "AtLatestKnown"
+  retries: 10
+  delay: 30
+
+- name: Install NMState Operator
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: "{{ nmstate_operator_name }}"
+        namespace: openshift-operators
+      spec:
+        channel: "{{ nmstate_operator_channel }}"
+        name: "{{ nmstate_operator_name }}"
+        source: "{{ nmstate_operator_source }}"
+        sourceNamespace: "{{ nmstate_operator_source_namespace }}"
+        installPlanApproval: Automatic
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Wait for NMState Operator to be ready
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: Subscription
+    name: "{{ nmstate_operator_name }}"
+    namespace: openshift-operators
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: nmstate_subscription
+  until: nmstate_subscription.resources[0].status.state is defined and nmstate_subscription.resources[0].status.state == "AtLatestKnown"
+  retries: 10
+  delay: 30
+
+- name: Install RHOSO Operator
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: "{{ rhoso_operator_name }}"
+        namespace: openshift-operators
+      spec:
+        channel: "{{ rhoso_channel }}"
+        name: "{{ rhoso_operator_name }}"
+        source: "{{ rhoso_operator_source }}"
+        sourceNamespace: "{{ rhoso_operator_source_namespace }}"
+        installPlanApproval: Automatic
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Wait for RHOSO Operator to be ready
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: Subscription
+    name: "{{ rhoso_operator_name }}"
+    namespace: openshift-operators
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: rhoso_subscription
+  until: rhoso_subscription.resources[0].status.state is defined and rhoso_subscription.resources[0].status.state == "AtLatestKnown"
+  retries: 10
+  delay: 30
+
+- name: Verify operator installations
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: Subscription
+    namespace: openshift-operators
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: installed_operators
+
+- name: Display installed operators
+  ansible.builtin.debug:
+    msg: "Installed operators: {{ installed_operators.resources | map(attribute='metadata.name') | list }}"
+
+- name: Operator installation summary
+  ansible.builtin.debug:
+    msg:
+      - "=== Operator Installation Complete ==="
+      - "✅ Cert-Manager Operator: Installed"
+      - "✅ MetalLB Operator: Installed"
+      - "✅ NMState Operator: Installed"
+      - "✅ RHOSO Operator: Installed"
+      - "✅ All operators ready for RHOSO deployment"
+
