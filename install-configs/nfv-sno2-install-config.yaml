@@ -1,0 +1,26 @@
+apiVersion: v1
+baseDomain: nfv.com
+compute:
+- name: worker
+  replicas: 0
+controlPlane:
+  name: master
+  replicas: 1
+metadata:
+  name: psi
+networking:
+  clusterNetwork:
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+  machineNetwork:
+  - cidr: 11.1.0.0/16
+  networkType: OVNKubernetes
+  serviceNetwork:
+  - 172.30.0.0/16
+platform:
+  none: {}
+bootstrapInPlace:
+  installationDisk: /dev/vda
+pullSecret: '__PULL_SECRET_PLACEHOLDER__'
+sshKey: |
+  ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCT720pdvXHkshMfn1/HiyAofGIjOQe12U92KLjReQlDcNkZELcyGADqvHdrg4ihuIpcHY28xv2Y8tIoEdaMbr9t+W0x2CHVgkWtWaIXbbW8z760RJIlNoL/GI/w1APrYAaxcr6Ko0tClmDoGZ/SpbM4x2mOCHTJqAVH/5ntY8PBSdd48n5v030h7NBOyJEGQXcb9jcy7oeWLdWDRjcuH9DnL1/gBLAOMF3XEfAf/QzFmdg0t8LxFSWd6mUP3z2d/7yg0Qjp4nkFmOMkXvKOov8GRUcaeE4Ftu+fJS1684owT/vGuUdLw0m2P9Njlao/8TRQnel4RGvtFQpIjV8sT8kF5mrmWI8q9A29Mw5b+QtwZL8lwJEckzx5bYGq96FSux7U0ao3XnquFg5AyDJFPGmaVHqTMzGNbzkL1AxAthLXZ09M06aMKiuioeFrFcn/qAcgZLlyaFTmQJhSUiHIsMGdiTastf1wBER3/kaWrbW0KCcjJGbZ38+6ocqdRshQqs= nextgen@dell-r640-oss-10
