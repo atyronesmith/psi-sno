@@ -29,10 +29,11 @@ All services have been optimized for SNO with `replicas: 1` instead of the defau
 - **Make Target**: `make setup-storage` - One-command storage preparation
 - **Integration**: Automatically creates directories and applies persistent volumes
 
-### 4. Complete Secret Management
-- **All service passwords included**: PlacementPassword, KeystonePassword, GlancePassword, etc.
+### 4. Secure Password Management
+- **File-based secrets**: Passwords loaded from `secrets/passwords.yaml` (not committed to git)
+- **Example configuration**: `secrets/passwords.yaml.example` shows required structure
 - **Multiple deployment paths**: Ansible roles, Kustomize components, NFV examples
-- **No manual patching required**: Secrets complete from initial deployment
+- **Security first**: Sensitive files excluded via `.gitignore`, only examples committed
 
 ## Deployment Workflow
 
@@ -44,6 +45,10 @@ source ~/psi/bin/activate
 # Set OpenStack cloud
 export OS_CLOUD=psi
 
+# Setup passwords file (first time only)
+cp secrets/passwords.yaml.example secrets/passwords.yaml
+vim secrets/passwords.yaml  # Edit with your actual passwords
+
 # Verify cluster access
 oc cluster-info
 ```
@@ -53,10 +58,13 @@ oc cluster-info
 # 1. Setup storage infrastructure
 make setup-storage
 
-# 2. Deploy RHOSO with specific project
+# 2. Generate secrets from passwords file (for Kustomize deployments)
+make generate-secrets
+
+# 3. Deploy RHOSO with specific project
 make deploy-psi PROJECT=psi-example
 
-# 3. Monitor deployment
+# 4. Monitor deployment
 oc get pods -n openstack
 oc get openstackcontrolplane -n openstack
 ```
@@ -80,9 +88,11 @@ make setup-storage
 - `Makefile` - Enhanced setup-storage target
 
 ### Secret Management
-- `roles/openshift/rhoso-control-plane/tasks/deploy_services.yml` - Ansible secret creation
+- `secrets/passwords.yaml.example` - Sample passwords configuration
+- `secrets/README.md` - Security documentation and usage instructions
+- `roles/openshift/rhoso-control-plane/tasks/deploy_services.yml` - Ansible secret creation with file loading
+- `scripts/generate-secrets.sh` - Generate Kustomize secrets from passwords file
 - `examples/va/nfv/secret.yaml` - NFV example secret definition
-- `lib/secrets/osp-secret.yaml` - Kustomize component secret
 
 ### Documentation
 - `.cursorrules` - Updated with current cluster status and deployment notes

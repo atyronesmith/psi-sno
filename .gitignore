@@ -4,7 +4,6 @@ install-config.yaml
 proj-*
 .openshift_install.log
 cr-gen
-secrets
 
 # Python virtual environments
 venv/
@@ -23,11 +22,19 @@ __pycache__/
 
 # Build artifacts
 build/
+
+# Secrets directory - exclude sensitive files but keep examples and documentation
+secrets/passwords.yaml
+secrets/pull-secret.txt
 secrets/*.txt
 secrets/*.pub
 secrets/*.pem
 secrets/*.key
+secrets/*.json
+secrets/*.conf
+# Allow example files and documentation
 !secrets/*.example
+!secrets/README.md
 !secrets/.keep
 
 # Generated configs
