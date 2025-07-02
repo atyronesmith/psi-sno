@@ -43,6 +43,7 @@ help:
 	@echo "  validate-nfv-architecture - Validate NFV deployment status"
 	@echo "  clean-nfv-architecture  - Clean up NFV architecture resources"
 	@echo "  setup-storage          - Setup local storage for OpenStack services"
+	@echo "  generate-secrets       - Generate secrets from passwords file"
 	@echo ""
 	@echo "OpenStack Deployment (install_yamls workflow):"
 	@echo "  openstack              - Install OpenStack operators"
@@ -410,6 +411,11 @@ clean-nfv-architecture:
 	@echo "Removing secrets..."
 	@oc delete secret osp-secret -n openstack --ignore-not-found=true
 	@echo "✅ NFV architecture cleanup completed!"
+
+# Generate Secrets from passwords file
+generate-secrets:
+	@echo "Generating OpenStack secrets from passwords file..."
+	@./scripts/generate-secrets.sh
 
 # Storage Setup Target
 setup-storage:
