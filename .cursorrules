@@ -241,3 +241,35 @@ A successful deployment will show:
   2. Scan project directory for generated `.bu` files
   3. Process `merge.bu.j2` with `butane_files` variable containing list of generated files
   4. Results in `merge.bu` that references bootstrap ignition + all Butane configurations
+
+## Current Cluster Status & Configuration (Latest)
+
+### **PSI-SNO Cluster Information**
+- **Cluster API**: `api.psi.nfv.com:6443`
+- **Node**: `psi.nfv.com` (Single Node OpenShift)
+- **OpenShift Version**: 4.18.10
+- **Kubernetes Version**: v1.31.7
+- **Environment Setup**: `source ~/psi/bin/activate && export OS_CLOUD=psi`
+- **KUBECONFIG**: `/home/nextgen/dev/psi-sno/build/projects/psi-9l494/auth/kubeconfig`
+
+### **Current Deployment Issues & Solutions**
+- **RabbitMQ Problem**: 3 replicas stuck in Pending state on SNO (insufficient resources/storage)
+- **Solution Applied**: Reduced RabbitMQ replicas from 3 to 1 in template and configuration
+- **PersistentVolume Path**: Uses `/mnt/openstack/pv$i` structure (pv1, pv2, pv3, pv4, pv5)
+- **Primary PV File**: `lib/storage/persistent-volumes.yaml` (used in Kustomize deployments)
+- **Storage Mapping**:
+  - pv1: RabbitMQ (10Gi)
+  - pv2: MariaDB (10Gi)
+  - pv3: Galera (10Gi)
+  - pv4: Glance (50Gi)
+  - pv5: Cinder (20Gi)
+
+### **OpenStack Operators Status**
+- **All operators running successfully**: barbican, cinder, glance, keystone, neutron, nova, etc.
+- **Operators location**: openstack namespace
+- **Issue**: RabbitMQ service pods failing due to SNO resource constraints
+
+### **MachineConfig Integration**
+- **Created role**: `roles/openshift/machineconfig-applier/` for applying MachineConfigs
+- **Make target**: `make apply-machineconfig-psi` for chrony time sync configuration
+- **Ansible compliance**: All files end with newline character

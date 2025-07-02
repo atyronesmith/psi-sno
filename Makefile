@@ -1,4 +1,4 @@
-.PHONY: help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv setup-completion download-iso create-iso create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi deploy-psi destroy-psi health-check-psi logs-psi backup-psi restore-psi vxlan-create vxlan-delete vxlan-status delete-project delete-project-y delete-project-name delete-project-all boot-sno gen-machineconfig-psi
+.PHONY: help lint lint-fix syntax-check test clean install-deps setup-venv activate-venv setup-completion download-iso create-iso create-iso-psi bootstrap-psi validate-psi info-psi start-psi stop-psi deploy-psi destroy-psi health-check-psi logs-psi backup-psi restore-psi vxlan-create vxlan-delete vxlan-status delete-project delete-project-y delete-project-name delete-project-all boot-sno gen-machineconfig-psi apply-machineconfig-psi deploy-nfv-architecture test-nfv-architecture validate-nfv-architecture clean-nfv-architecture setup-storage openstack openstack-init openstack-prep openstack-deploy openstack-workflow
 
 help:
 	@echo "Available targets:"
@@ -21,6 +21,7 @@ help:
 	@echo "  destroy-psi    - Destroy PSI environment"
 	@echo "  create-iso-psi - Create ISO for PSI environment"
 	@echo "  gen-machineconfig-psi - Generate machine configurations from Butane templates"
+	@echo "  apply-machineconfig-psi - Apply MachineConfig to PSI cluster (chrony time sync)"
 	@echo "  bootstrap-psi  - Wait for OpenShift bootstrap completion"
 	@echo "  validate-psi   - Run validation checks on PSI environment"
 	@echo "  info-psi       - Get cluster information"
@@ -30,6 +31,25 @@ help:
 	@echo "  logs-psi       - Collect logs from PSI environment"
 	@echo "  backup-psi     - Backup PSI cluster configuration"
 	@echo "  restore-psi    - Restore PSI cluster from backup"
+	@echo ""
+	@echo "RHOSO Control Plane:"
+	@echo "  deploy-rhoso   - Deploy RHOSO Control Plane"
+	@echo "  deploy-rhoso PROJECT=name - Deploy RHOSO for specific project"
+	@echo "  deploy-rhoso-psi - Deploy RHOSO Control Plane to PSI (with defaults)"
+	@echo ""
+	@echo "NFV Architecture (Kustomize-based):"
+	@echo "  deploy-nfv-architecture - Deploy NFV validated architecture using Kustomize"
+	@echo "  test-nfv-architecture   - Test NFV architecture with dry-run"
+	@echo "  validate-nfv-architecture - Validate NFV deployment status"
+	@echo "  clean-nfv-architecture  - Clean up NFV architecture resources"
+	@echo "  setup-storage          - Setup local storage for OpenStack services"
+	@echo ""
+	@echo "OpenStack Deployment (install_yamls workflow):"
+	@echo "  openstack              - Install OpenStack operators"
+	@echo "  openstack-prep         - Prepare dependencies (storage, networking)"
+	@echo "  openstack-init         - Initialize OpenStack (prep + operators)"
+	@echo "  openstack-deploy       - Deploy OpenStack control plane"
+	@echo "  openstack-workflow     - Complete workflow (prep + operators + deploy)"
 	@echo ""
 	@echo "Server Management:"
 	@echo "  boot-sno [PROJECT=name] - Create server that boots from existing volume (interactive if no PROJECT)"
@@ -172,6 +192,19 @@ gen-machineconfig-psi:
 	fi
 	ansible-playbook playbooks/gen-machineconfig.yml --tags machineconfig
 
+apply-machineconfig-psi:
+	@echo "Applying MachineConfig to PSI cluster..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if [ -z "$$OS_CLOUD" ]; then \
+		echo "❌ Error: OS_CLOUD environment variable not set. Please run 'export OS_CLOUD=psi' first."; \
+		exit 1; \
+	fi
+	@echo "🔧 Applying chrony MachineConfig to master nodes..."
+	ansible-playbook playbooks/apply-machineconfig.yml
+
 bootstrap-psi:
 	@echo "Waiting for OpenShift bootstrap completion in PSI..."
 	ansible-playbook -i inventory/environments/psi playbooks/bootstrap.yml
@@ -227,6 +260,42 @@ restore-psi:
 		echo "Restore playbook not found."; \
 	fi
 
+# RHOSO Control Plane deployment
+deploy-rhoso:
+	@echo "Deploying RHOSO Control Plane..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if [ -z "$$OS_CLOUD" ]; then \
+		echo "❌ Error: OS_CLOUD environment variable not set. Please run 'export OS_CLOUD=psi' first."; \
+		exit 1; \
+	fi
+	@if [ -n "$(PROJECT)" ]; then \
+		echo "Using project: $(PROJECT)"; \
+		ansible-playbook -i inventory/environments/psi playbooks/deploy-rhoso-control-plane.yml -e project_name="$(PROJECT)"; \
+	else \
+		ansible-playbook -i inventory/environments/psi playbooks/deploy-rhoso-control-plane.yml; \
+	fi
+
+deploy-rhoso-psi:
+	@echo "Deploying RHOSO Control Plane to PSI environment..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if [ -z "$$OS_CLOUD" ]; then \
+		echo "❌ Error: OS_CLOUD environment variable not set. Please run 'export OS_CLOUD=psi' first."; \
+		exit 1; \
+	fi
+	@if [ -n "$(PROJECT)" ]; then \
+		echo "Using project: $(PROJECT)"; \
+		ansible-playbook -i inventory/environments/psi playbooks/deploy-rhoso-control-plane.yml -e project_name="$(PROJECT)"; \
+	else \
+		echo "No project specified, will use default or prompt for selection..."; \
+		ansible-playbook -i inventory/environments/psi playbooks/deploy-rhoso-control-plane.yml -e project_name="psi-9l494"; \
+	fi
+
 download-iso:
 	@echo "Downloading RHCOS ISO..."
 	ansible-playbook playbooks/download-iso.yml
@@ -279,3 +348,150 @@ boot-sno:
 		echo "No project specified, will prompt for selection..."; \
 		ansible-playbook playbooks/create-volume-boot-server.yml; \
 	fi
+
+# NFV Architecture Targets (Kustomize-based)
+deploy-nfv-architecture:
+	@echo "Deploying NFV validated architecture..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if [ -z "$$OS_CLOUD" ]; then \
+		echo "❌ Error: OS_CLOUD environment variable not set. Please run 'export OS_CLOUD=psi' first."; \
+		exit 1; \
+	fi
+	@./scripts/deploy-nfv-architecture.sh $(if $(SECRETS),--update-secrets)
+
+test-nfv-architecture:
+	@echo "Testing NFV architecture with dry-run..."
+	@if ! command -v kustomize &> /dev/null; then \
+		echo "❌ Error: kustomize is required. Please install kustomize 5.0.1 or higher."; \
+		exit 1; \
+	fi
+	@echo "Building NFV architecture configuration..."
+	@cd examples/va/nfv && kustomize build . > /tmp/nfv-architecture-test.yaml
+	@echo "✅ NFV architecture configuration built successfully!"
+	@echo "Configuration saved to /tmp/nfv-architecture-test.yaml for review"
+	@echo "To deploy: make deploy-nfv-architecture"
+	@echo "To deploy with secrets update: make deploy-nfv-architecture SECRETS=true"
+
+validate-nfv-architecture:
+	@echo "Validating NFV architecture deployment..."
+	@if ! oc cluster-info &> /dev/null; then \
+		echo "❌ Error: OpenShift cluster is not accessible. Please ensure you're logged in."; \
+		exit 1; \
+	fi
+	@echo "Checking OpenStack namespace..."
+	@oc get namespace openstack 2>/dev/null && echo "✅ OpenStack namespace exists" || echo "❌ OpenStack namespace missing"
+	@echo "Checking OpenStack operators..."
+	@oc get pods -n openstack-operators 2>/dev/null && echo "✅ OpenStack operators found" || echo "❌ OpenStack operators not found"
+	@echo "Checking OpenStack control plane..."
+	@oc get openstackcontrolplane -n openstack 2>/dev/null && echo "✅ OpenStack control plane found" || echo "❌ OpenStack control plane not found"
+	@echo "Checking network configurations..."
+	@oc get netconfig -n openstack 2>/dev/null && echo "✅ NetConfig found" || echo "❌ NetConfig not found"
+	@oc get networkattachmentdefinition -n openstack 2>/dev/null && echo "✅ NetworkAttachmentDefinitions found" || echo "❌ NetworkAttachmentDefinitions not found"
+	@echo "Checking MetalLB configuration..."
+	@oc get ipaddresspool -n metallb-system 2>/dev/null && echo "✅ MetalLB IPAddressPools found" || echo "❌ MetalLB IPAddressPools not found"
+
+clean-nfv-architecture:
+	@echo "Cleaning up NFV architecture resources..."
+	@if ! oc cluster-info &> /dev/null; then \
+		echo "❌ Error: OpenShift cluster is not accessible. Please ensure you're logged in."; \
+		exit 1; \
+	fi
+	@echo "Removing OpenStack control plane..."
+	@oc delete openstackcontrolplane -n openstack --all --ignore-not-found=true
+	@echo "Removing network configurations..."
+	@oc delete netconfig -n openstack --all --ignore-not-found=true
+	@oc delete networkattachmentdefinition -n openstack --all --ignore-not-found=true
+	@echo "Removing MetalLB configurations..."
+	@oc delete ipaddresspool -n metallb-system -l osp/lb-addresses-type=standard --ignore-not-found=true
+	@oc delete l2advertisement -n metallb-system --all --ignore-not-found=true
+	@echo "Removing secrets..."
+	@oc delete secret osp-secret -n openstack --ignore-not-found=true
+	@echo "✅ NFV architecture cleanup completed!"
+
+# Storage Setup Target
+setup-storage:
+	@echo "Setting up local storage for OpenStack services..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if ! oc cluster-info &> /dev/null; then \
+		echo "❌ Error: OpenShift cluster is not accessible. Please ensure you're logged in."; \
+		exit 1; \
+	fi
+	@echo "Running storage setup script..."
+	@sudo ./scripts/setup-local-storage.sh
+	@echo "✅ Storage setup completed!"
+	@echo "You can now deploy OpenStack services that require persistent storage."
+
+# OpenStack Deployment Workflow (inspired by install_yamls)
+openstack-prep:
+	@echo "Preparing OpenStack dependencies..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if ! oc cluster-info &> /dev/null; then \
+		echo "❌ Error: OpenShift cluster is not accessible. Please ensure you're logged in."; \
+		exit 1; \
+	fi
+	@echo "Setting up local storage..."
+	@$(MAKE) setup-storage
+	@echo "Applying base networking and storage components..."
+	@cd lib && kustomize build . | oc apply -f -
+	@echo "✅ OpenStack dependencies prepared!"
+
+openstack:
+	@echo "Installing OpenStack operators..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if ! oc cluster-info &> /dev/null; then \
+		echo "❌ Error: OpenShift cluster is not accessible. Please ensure you're logged in."; \
+		exit 1; \
+	fi
+	@echo "Creating OpenStack operator subscriptions..."
+	@oc apply -f lib/operators/
+	@echo "Waiting for operators to be ready..."
+	@sleep 30
+	@oc get pods -n openstack-operators 2>/dev/null || echo "Operators still starting..."
+	@echo "✅ OpenStack operators installation initiated!"
+
+openstack-init: openstack-prep openstack
+	@echo "Initializing OpenStack..."
+	@echo "Dependencies and operators are now installed."
+	@echo "✅ OpenStack initialization completed!"
+	@echo "Next step: Run 'make openstack-deploy' to deploy the control plane."
+
+openstack-deploy:
+	@echo "Deploying OpenStack control plane..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if ! oc cluster-info &> /dev/null; then \
+		echo "❌ Error: OpenShift cluster is not accessible. Please ensure you're logged in."; \
+		exit 1; \
+	fi
+	@echo "Deploying NFV-optimized OpenStack control plane..."
+	@cd examples/va/nfv && kustomize build . | oc apply -f -
+	@echo "✅ OpenStack control plane deployment initiated!"
+	@echo "Monitor deployment with: oc get pods -n openstack"
+	@echo "Check control plane status: oc get openstackcontrolplane -n openstack"
+
+openstack-workflow:
+	@echo "Running complete OpenStack deployment workflow..."
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Error: Virtual environment not activated. Please run 'source ~/psi/bin/activate' first."; \
+		exit 1; \
+	fi
+	@if [ -z "$$OS_CLOUD" ]; then \
+		echo "❌ Error: OS_CLOUD environment variable not set. Please run 'export OS_CLOUD=psi' first."; \
+		exit 1; \
+	fi
+	@./scripts/deploy-openstack-workflow.sh
+	@echo "✅ Complete OpenStack workflow executed!"
