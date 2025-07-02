@@ -1,0 +1,11 @@
+---
+# Default variables for openshift/machineconfig-applier role
+
+# Path to the MachineConfig file to apply
+machineconfig_file_path: "99-master-chrony-machineconfig.yaml"
+
+# Whether to wait for the MachineConfigPool to be fully updated
+wait_for_update: false
+
+# Default timeout for waiting operations (in seconds)
+wait_timeout: 300

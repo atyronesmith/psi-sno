@@ -1,0 +1,84 @@
+---
+# Apply MachineConfig files to the OpenShift cluster
+
+- name: Check if OpenShift cluster is accessible
+  kubernetes.core.k8s_info:
+    api_version: config.openshift.io/v1
+    kind: ClusterVersion
+  register: cluster_version
+  failed_when: false
+
+- name: Fail if cluster is not accessible
+  ansible.builtin.fail:
+    msg: "OpenShift cluster is not accessible. Please ensure you're logged in with 'oc login' and cluster is running."
+  when: cluster_version.failed
+
+- name: Display cluster version
+  ansible.builtin.debug:
+    msg: "Connected to OpenShift cluster version {{ cluster_version.resources[0].status.desired.version }}"
+  when: not cluster_version.failed
+
+- name: Check if chrony MachineConfig file exists
+  ansible.builtin.stat:
+    path: "{{ machineconfig_file_path | default('99-master-chrony-machineconfig.yaml') }}"
+  register: machineconfig_file
+
+- name: Fail if MachineConfig file doesn't exist
+  ansible.builtin.fail:
+    msg: "MachineConfig file not found at {{ machineconfig_file_path | default('99-master-chrony-machineconfig.yaml') }}"
+  when: not machineconfig_file.stat.exists
+
+- name: Apply chrony MachineConfig
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ machineconfig_file_path | default('99-master-chrony-machineconfig.yaml') }}"
+    wait: true
+    wait_condition:
+      type: Applied
+      status: "True"
+    wait_timeout: 300
+  register: machineconfig_result
+
+- name: Display MachineConfig application result
+  ansible.builtin.debug:
+    msg: "MachineConfig {{ machineconfig_result.result.metadata.name }} has been applied successfully"
+
+- name: Check MachineConfigPool status
+  kubernetes.core.k8s_info:
+    api_version: machineconfiguration.openshift.io/v1
+    kind: MachineConfigPool
+    name: master
+  register: mcp_status
+
+- name: Display MachineConfigPool update status
+  ansible.builtin.debug:
+    msg: |
+      MachineConfigPool 'master' status:
+      - Updated: {{ mcp_status.resources[0].status.updatedMachineCount | default(0) }}/{{ mcp_status.resources[0].status.machineCount | default(0) }}
+      - Ready: {{ mcp_status.resources[0].status.readyMachineCount | default(0) }}/{{ mcp_status.resources[0].status.machineCount | default(0) }}
+      - Updating: {{ mcp_status.resources[0].status.updating | default(false) }}
+
+- name: Wait for MachineConfigPool to be updated (optional)
+  kubernetes.core.k8s_info:
+    api_version: machineconfiguration.openshift.io/v1
+    kind: MachineConfigPool
+    name: master
+    wait: true
+    wait_condition:
+      type: Updated
+      status: "True"
+    wait_timeout: 1800  # 30 minutes
+  when: wait_for_update | default(false)
+  register: mcp_updated
+
+- name: Display final status
+  ansible.builtin.debug:
+    msg: |
+      ✅ MachineConfig application completed!
+
+      Next steps:
+      1. Monitor the MachineConfigPool: oc get mcp master -w
+      2. Check node updates: oc get nodes
+      3. Verify chrony configuration after nodes reboot
+
+      Note: Nodes will automatically reboot to apply the new configuration.

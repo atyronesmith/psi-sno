@@ -1,13 +1,15 @@
 ---
-apiVersion: operator.openstack.org/v1beta1
-kind: OpenStack
+apiVersion: core.openstack.org/v1beta1
+kind: OpenStackControlPlane
 metadata:
   name: openstack
   namespace: {{ rhoso_namespace }}
 spec:
   secret: osp-secret
-{% if rhoso_storage_class != "none" %}
-  storageClass: {{ rhoso_storage_class | default('local-storage') }}
+{% if rhoso_storage_class is defined and rhoso_storage_class != "none" %}
+  storageClass: {{ rhoso_storage_class }}
+{% else %}
+  storageClass: ""
 {% endif %}
 
   # DNS Configuration
@@ -68,17 +70,14 @@ spec:
       storage:
         storageRequest: {{ rhoso_pv_sizes.glance_storage | default('100Gi') }}
 {% endif %}
-      glanceAPIs:
-        default:
-          replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'glance') | first).replicas | default(2) }}
-          override:
-            service:
-              internal:
-                metadata:
-                  annotations:
-                    metallb.universe.tf/address-pool: {{ rhoso_namespace }}
-                spec:
-                  type: LoadBalancer
+      override:
+        service:
+          internal:
+            metadata:
+              annotations:
+                metallb.universe.tf/address-pool: {{ rhoso_namespace }}
+            spec:
+              type: LoadBalancer
 {% endif %}
 
   # Placement Service
@@ -174,13 +173,21 @@ spec:
           memory: {{ rhoso_service_resources.nova.limits.memory | default(rhoso_resource_defaults.limits.memory) }}
 {% endif %}
 
-  # Horizon Dashboard
+  # Horizon Dashboard - ENABLED
 {% if (rhoso_control_plane_services | selectattr('name', 'equalto', 'horizon') | first).enabled %}
   horizon:
     enabled: true
     template:
       replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'horizon') | first).replicas | default(2) }}
       secret: osp-secret
+      override:
+        service:
+          public:
+            metadata:
+              annotations:
+                metallb.universe.tf/address-pool: {{ rhoso_namespace }}
+            spec:
+              type: LoadBalancer
 {% endif %}
 
   # Heat Orchestration Service (Optional)
@@ -196,15 +203,15 @@ spec:
         replicas: {{ (rhoso_control_plane_services | selectattr('name', 'equalto', 'heat') | first).replicas | default(2) }}
 {% endif %}
 
-  # MariaDB Database
-  mariadb:
+  # Galera Database (MariaDB)
+  galera:
     enabled: true
     templates:
       openstack:
 {% if rhoso_storage_class != "none" %}
         storageRequest: {{ rhoso_pv_sizes.keystone_db | default('10Gi') }}
 {% endif %}
-        replicas: 3
+        replicas: 1
         resources:
           requests:
             cpu: {{ rhoso_resource_defaults.requests.cpu }}
@@ -218,7 +225,10 @@ spec:
     enabled: true
     templates:
       rabbitmq:
-        replicas: 3
+        replicas: 1
+{% if rhoso_storage_class is defined and rhoso_storage_class != "none" %}
+        storageRequest: 10Gi
+{% endif %}
         resources:
           requests:
             cpu: {{ rhoso_resource_defaults.requests.cpu }}
@@ -232,7 +242,7 @@ spec:
     enabled: true
     templates:
       memcached:
-        replicas: 3
+        replicas: 1
         resources:
           requests:
             cpu: {{ rhoso_resource_defaults.requests.cpu }}
@@ -240,4 +250,24 @@ spec:
           limits:
             cpu: {{ rhoso_resource_defaults.limits.cpu }}
             memory: {{ rhoso_resource_defaults.limits.memory }}
+
+  # OVN Networking
+  ovn:
+    enabled: true
+    template:
+      ovnDBCluster:
+        ovndbcluster-nb:
+          replicas: 1
+        ovndbcluster-sb:
+          replicas: 1
+      ovnNorthd:
+        replicas: 1
+      ovnController:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
 

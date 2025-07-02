@@ -1,0 +1,29 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: "local-storage-rabbitmq-pv"
+  annotations:
+    pv.kubernetes.io/provisioned-by: psi-devsetup
+  labels:
+    provisioned-by: psi-devsetup
+    service: rabbitmq
+spec:
+  storageClassName: local-storage
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+    - ReadWriteMany
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Delete
+  local:
+    path: "/mnt/openstack/pv1"
+    type: DirectoryOrCreate
+  volumeMode: Filesystem
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values: ["REPLACE_WITH_NODE_NAME"]

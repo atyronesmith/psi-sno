@@ -1,0 +1,11 @@
+---
+- name: Apply MachineConfig to OpenShift Cluster
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  roles:
+    - role: openshift/machineconfig-applier
+      tags:
+        - apply_machineconfig
+        - machineconfig

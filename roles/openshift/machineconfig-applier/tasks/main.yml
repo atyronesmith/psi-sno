@@ -1,0 +1,13 @@
+---
+# tasks file for openshift/machineconfig-applier
+
+- name: "Include and run tasks from apply_machineconfig.yml"
+  ansible.builtin.include_tasks: apply_machineconfig.yml
+  tags:
+    - apply_machineconfig
+    - machineconfig
+  when: >
+    'apply_machineconfig' in ansible_run_tags or
+    'machineconfig' in ansible_run_tags or
+    'all' in ansible_run_tags or
+    ansible_run_tags == ['all']

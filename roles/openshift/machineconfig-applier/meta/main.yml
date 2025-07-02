@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  author: PSI-SNO Team
+  description: Apply OpenShift MachineConfig resources to cluster
+  company: Red Hat
+  license: Apache-2.0
+  min_ansible_version: '2.12'
+  platforms:
+    - name: EL
+      versions:
+        - '8'
+        - '9'
+  galaxy_tags:
+    - openshift
+    - machineconfig
+    - kubernetes
+
+dependencies:
+  - name: kubernetes.core
+    version: '>=2.3.0'
