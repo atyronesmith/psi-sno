@@ -11,11 +11,20 @@
         namespace: "{{ rhoso_namespace }}"
       type: Opaque
       data:
-        # Base64 encoded placeholder passwords - should be replaced with real secrets
+        # Base64 encoded OpenStack service passwords - SNO optimized
         AdminPassword: "{{ 'admin123' | b64encode }}"
         DatabasePassword: "{{ 'database123' | b64encode }}"
         RabbitPassword: "{{ 'rabbit123' | b64encode }}"
         ServicePassword: "{{ 'service123' | b64encode }}"
+        # Individual service passwords
+        PlacementPassword: "{{ 'placement123' | b64encode }}"
+        KeystonePassword: "{{ 'keystone123' | b64encode }}"
+        GlancePassword: "{{ 'glance123' | b64encode }}"
+        CinderPassword: "{{ 'cinder123' | b64encode }}"
+        NeutronPassword: "{{ 'neutron123' | b64encode }}"
+        NovaPassword: "{{ 'nova123' | b64encode }}"
+        HeatPassword: "{{ 'heat123' | b64encode }}"
+        HorizonPassword: "{{ 'horizon123' | b64encode }}"
     state: present
     kubeconfig: "{{ kubeconfig_path }}"
 
