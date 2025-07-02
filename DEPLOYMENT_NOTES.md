@@ -29,6 +29,11 @@ All services have been optimized for SNO with `replicas: 1` instead of the defau
 - **Make Target**: `make setup-storage` - One-command storage preparation
 - **Integration**: Automatically creates directories and applies persistent volumes
 
+### 4. Complete Secret Management
+- **All service passwords included**: PlacementPassword, KeystonePassword, GlancePassword, etc.
+- **Multiple deployment paths**: Ansible roles, Kustomize components, NFV examples
+- **No manual patching required**: Secrets complete from initial deployment
+
 ## Deployment Workflow
 
 ### Prerequisites
@@ -73,6 +78,11 @@ make setup-storage
 - `scripts/setup-local-storage.sh` - Completely rewritten for SNO
 - `lib/storage/persistent-volumes.yaml` - Persistent volume definitions
 - `Makefile` - Enhanced setup-storage target
+
+### Secret Management
+- `roles/openshift/rhoso-control-plane/tasks/deploy_services.yml` - Ansible secret creation
+- `examples/va/nfv/secret.yaml` - NFV example secret definition
+- `lib/secrets/osp-secret.yaml` - Kustomize component secret
 
 ### Documentation
 - `.cursorrules` - Updated with current cluster status and deployment notes

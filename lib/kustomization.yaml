@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
 
 components:
+  - secrets
   - networking
   - operators
   - storage
